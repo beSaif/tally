@@ -18,12 +18,19 @@ export function maskKey(key: string, bullets = 14): string {
   return `${key.slice(0, 4)}${'•'.repeat(bullets)}${key.slice(-3)}`;
 }
 
-/** Key text + check status; the check re-runs when the model changes. */
+/** Typing pauses this long before a check, so Google is asked once per edit, not per keystroke. */
+const CHECK_DELAY_MS = 600;
+
+/**
+ * Key text + check status. A key given at mount is checked at once; after that the check re-runs
+ * when the key or the model changes, once typing pauses.
+ */
 export function useKeyCheck(model: string, initial = '') {
   const [key, setKeyState] = useState(initial);
   const [status, setStatus] = useState<KeyStatus>({ kind: 'idle' });
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const inflight = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
 
   const run = async (value: string) => {
     clearTimeout(timer.current);
@@ -60,13 +67,19 @@ export function useKeyCheck(model: string, initial = '') {
     if (opts.now) void run(value);
     else {
       setStatus({ kind: 'idle' });
-      timer.current = setTimeout(() => void run(value), 600);
+      timer.current = setTimeout(() => void run(value), CHECK_DELAY_MS);
     }
   };
 
   useEffect(() => {
-    if (key.trim()) void run(key);
-    // Re-check when the model changes (Settings); the key itself is handled by setKey.
+    if (!mounted.current) {
+      // Mount: a saved key (Settings) shows its status right away, once.
+      mounted.current = true;
+      if (key.trim()) void run(key);
+      return;
+    }
+    // The model is being typed (Settings): wait for a pause, as for the key itself.
+    if (key.trim()) setKey(key);
   }, [model]);
 
   useEffect(

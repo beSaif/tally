@@ -194,6 +194,33 @@ test('settings: every section', async ({ page }) => {
   expect((await page.request.get('/api/auth/me')).status()).toBe(401);
 });
 
+test('settings: the key is checked once when shown and once per model edit, never per keystroke', async ({ page }) => {
+  const { gemini } = await prepare(page, { withKey: true });
+  await signUp(page, { settings: { setup_complete: true } });
+  await page.goto('/settings');
+  const checked = () => gemini.requests.filter((r) => r.method === 'GET').map((r) => decodeURIComponent(new URL(r.url).pathname.split('/models/')[1] ?? ''));
+  const status = (text: string) => page.getByRole('status').filter({ hasText: text });
+  await expect(status('Key works · gemini-2.5-flash')).toBeVisible();
+  expect(checked()).toEqual(['gemini-2.5-flash']);
+
+  // A saved model change checks the saved key again, once.
+  const model = page.getByLabel('Model', { exact: true });
+  await model.fill('gemini-2.5-pro');
+  await model.press('Enter');
+  await expect(status('Key works · gemini-2.5-pro')).toBeVisible();
+  expect(checked()).toEqual(['gemini-2.5-flash', 'gemini-2.5-pro']);
+
+  // Typing a model while changing the key re-checks the new key once typing pauses.
+  await page.getByRole('button', { name: 'Change', exact: true }).first().click();
+  await page.getByLabel('Google AI Studio API key').fill(TEST_KEY);
+  await expect(status('Key works · gemini-2.5-pro')).toBeVisible();
+  const before = checked().length;
+  await model.fill('');
+  await model.pressSequentially('gemini-2.5-flash-lite', { delay: 30 });
+  await expect(status('Key works · gemini-2.5-flash-lite')).toBeVisible();
+  expect(checked().slice(before)).toEqual(['gemini-2.5-flash-lite']);
+});
+
 test('setup (00.1, 00.2) and sign-in screens', async ({ page }) => {
   await prepare(page);
   await page.goto('/login');
