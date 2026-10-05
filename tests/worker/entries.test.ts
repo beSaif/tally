@@ -331,6 +331,10 @@ describe('entries', () => {
     const theirs = mine!;
 
     expect(await list(b, '2026-10-01', '2026-10-31')).toEqual([]);
+    // There is no single-entry read in the API; the path must not leak anything either.
+    const read = await api(`/api/entries/${theirs.id}`, { cookie: b.cookie });
+    expect(read.status).toBe(404);
+    expect(await read.text()).not.toContain('A only');
     const p = await patch(b, theirs.id, { amount_cents: 1, description: 'hijacked' });
     expect(p.status).toBe(404);
     const d = await api(`/api/entries/${theirs.id}`, { method: 'DELETE', cookie: b.cookie });
