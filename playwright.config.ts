@@ -1,6 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 8787;
+/**
+ * End-to-end tests against the real Worker API: `wrangler dev` serving the built app on E2E_PORT
+ * (default 8787), with Gemini mocked per test (e2e/support/mock-gemini.ts) and a fake push service
+ * (e2e/support/fake-push.ts + push-sink.ts). Screenshots of every screen and state go to
+ * e2e/__screenshots__/ (390×844 @2x). A server already listening on E2E_PORT is reused locally;
+ * it must serve a fresh `npm run build`.
+ */
+const PORT = Number(process.env.E2E_PORT ?? 8787);
 const baseURL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
@@ -8,26 +15,29 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  timeout: 60_000,
+  timeout: 90_000,
   expect: { timeout: 10_000 },
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   outputDir: 'test-results',
   use: {
-    baseURL,
     ...devices['Pixel 7'],
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
+    baseURL,
     locale: 'en-CH',
     timezoneId: 'Europe/Zurich',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
-      : {},
+    permissions: ['microphone', 'clipboard-read', 'clipboard-write'],
+    launchOptions: {
+      // A fake microphone (a beeping tone), so the real Recorder works headless.
+      args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+      ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}),
+    },
   },
-  projects: [{ name: 'mobile-chromium', use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 } } }],
+  projects: [{ name: 'e2e' }],
   webServer: {
-    command: 'npm run build && npm run db:migrate:local && npx wrangler dev --port 8787 --test-scheduled',
+    command: `npm run build && npm run db:migrate:local && npx wrangler dev --port ${PORT} --test-scheduled`,
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
