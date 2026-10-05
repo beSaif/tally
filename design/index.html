@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tally — Design Round 01</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FFFFFF; --paper:#F6F6F4; --ink:#0B0B0B; --ink2:#2A2A2A; --mute:#7A7A7A; --faint:#B5B5B5;
+    --line:#E7E7E4; --acc:#FF4F00;
+    --sans:"Geist",ui-sans-serif,system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.4}
+  .mono{font-family:var(--mono);font-feature-settings:"tnum" 1}
+  .wrap{max-width:1240px;margin:0 auto;padding:40px 24px 120px}
+
+  /* ---------- board chrome ---------- */
+  header.board{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;border-bottom:1px solid var(--ink);padding-bottom:20px}
+  header.board h1{font-size:56px;font-weight:800;letter-spacing:-.04em;line-height:.9}
+  header.board .meta{font-family:var(--mono);font-size:11px;color:var(--mute);text-align:right;text-transform:uppercase;letter-spacing:.06em;line-height:1.7}
+  .intro{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--line)}
+  .intro div{padding:18px 20px 22px 0;border-right:1px solid var(--line);margin-right:20px}
+  .intro div:last-child{border-right:0}
+  .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-bottom:6px}
+  .intro p{font-size:14px;color:var(--ink2);max-width:34ch}
+  section.v{margin-top:72px}
+  .vhead{display:grid;grid-template-columns:80px 1fr auto;align-items:baseline;gap:16px;border-top:1px solid var(--ink);padding-top:14px;margin-bottom:28px}
+  .vhead .num{font-family:var(--mono);font-size:44px;font-weight:500;letter-spacing:-.04em}
+  .vhead h2{font-size:28px;font-weight:700;letter-spacing:-.025em}
+  .vhead p{color:var(--mute);max-width:56ch;margin-top:4px;font-size:14px}
+  .vhead .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--ink);padding:4px 8px;white-space:nowrap}
+  .vhead .tag.acc{border-color:var(--acc);color:var(--acc)}
+  .row{display:flex;gap:28px;overflow-x:auto;padding-bottom:12px;scroll-snap-type:x mandatory}
+  .shot{flex:0 0 auto;scroll-snap-align:start}
+  .cap{font-family:var(--mono);font-size:10.5px;color:var(--mute);letter-spacing:.06em;text-transform:uppercase;margin-top:12px;display:flex;justify-content:space-between}
+
+  /* ---------- phone ---------- */
+  .phone{width:340px;height:720px;background:var(--bg);border-radius:44px;border:1px solid #D9D9D6;position:relative;overflow:hidden;
+         box-shadow:0 1px 0 rgba(0,0,0,.02);display:flex;flex-direction:column}
+  .sb{height:44px;flex:0 0 44px;display:flex;justify-content:space-between;align-items:center;padding:6px 28px 0;font-size:13px;font-weight:600}
+  .sb i{font-style:normal;font-family:var(--mono);font-size:11px;font-weight:500}
+  .scr{flex:1;display:flex;flex-direction:column;padding:8px 20px 0;min-height:0;position:relative}
+  .home-ind{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:120px;height:4px;border-radius:4px;background:var(--ink)}
+
+  .topline{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 0 10px;border-bottom:1px solid var(--line)}
+  .wordmark{font-family:var(--sans);font-weight:800;letter-spacing:-.02em;font-size:15px;text-transform:none;display:flex;align-items:center;gap:7px}
+  .wordmark svg{width:18px;height:18px;border-radius:4px}
+  .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+  .big{font-family:var(--mono);font-weight:500;letter-spacing:-.05em;line-height:.95}
+  .cur{font-family:var(--mono);font-size:12px;color:var(--mute);letter-spacing:.02em}
+  .hair{height:1px;background:var(--line)}
+  .entries{list-style:none}
+  .entries li{display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line)}
+  .entries .t{font-family:var(--mono);font-size:11px;color:var(--mute)}
+  .entries .n{font-size:14.5px;font-weight:500;letter-spacing:-.01em}
+  .entries .c{font-size:11.5px;color:var(--mute);display:block;margin-top:1px}
+  .entries .a{font-family:var(--mono);font-size:14px;font-weight:500}
+  .daygrp{display:flex;justify-content:space-between;margin-top:18px;padding-bottom:6px;border-bottom:1px solid var(--ink)}
+  .daygrp span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+
+  .composer{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 28px;background:linear-gradient(to bottom,rgba(255,255,255,0),#fff 22%)}
+  .cbox{display:flex;align-items:center;gap:8px;border:1px solid var(--ink);border-radius:14px;padding:6px 6px 6px 14px;background:#fff}
+  .cbox .ph{flex:1;color:var(--faint);font-size:14.5px}
+  .ibtn{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:0 0 auto}
+  .ibtn.dark{background:var(--ink);color:#fff}
+  .ibtn.acc{background:var(--acc);color:#fff}
+  .ibtn.ghost{color:var(--ink)}
+  .ibtn svg{width:20px;height:20px}
+
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--ink);padding:16px 20px 30px;border-radius:22px 22px 0 0;box-shadow:0 -20px 40px rgba(0,0,0,.06)}
+  .dim{position:absolute;inset:0;background:rgba(255,255,255,.72)}
+  .wave{display:flex;align-items:center;gap:3px;height:34px}
+  .wave b{display:block;width:3px;background:var(--acc);border-radius:1px}
+  .kv{display:grid;grid-template-columns:86px 1fr;border-top:1px solid var(--line)}
+  .kv div{padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .kv div:nth-child(odd){font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);padding-top:12px}
+  .btns{display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:16px}
+  .btn{height:48px;border-radius:12px;display:grid;place-items:center;font-weight:600;font-size:15px;border:1px solid var(--ink)}
+  .btn.primary{background:var(--ink);color:#fff}
+  .btn.acc{background:var(--acc);border-color:var(--acc);color:#fff}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--ink2)}
+  .pill.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--acc);display:inline-block}
+
+  .bars{list-style:none;margin-top:6px}
+  .bars li{padding:11px 0;border-bottom:1px solid var(--line)}
+  .bars .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+  .bars .top b{font-weight:500;font-size:14px}
+  .bars .top span{font-family:var(--mono);font-size:13px}
+  .track{height:4px;background:var(--paper)}
+  .fill{height:4px;background:var(--ink)}
+  .tabs{display:flex;gap:0;border:1px solid var(--ink);border-radius:10px;overflow:hidden;margin:14px 0 18px}
+  .tabs div{flex:1;text-align:center;padding:8px 0;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-right:1px solid var(--ink)}
+  .tabs div:last-child{border-right:0}
+  .tabs .on{background:var(--ink);color:#fff}
+
+  /* keypad (B) */
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);margin:0 -20px}
+  .keypad div{height:58px;display:grid;place-items:center;font-family:var(--mono);font-size:22px;font-weight:400;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .keypad div:nth-child(3n){border-right:0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .hold{display:flex;align-items:center;justify-content:center;gap:10px;height:56px;border-radius:14px;background:var(--ink);color:#fff;font-weight:600;font-size:15px;margin-top:12px}
+  .hold svg{width:20px;height:20px}
+  .caret{display:inline-block;width:3px;height:.8em;background:var(--acc);margin-left:4px;vertical-align:-.04em}
+  .heat{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
+  .heat div{aspect-ratio:1;border-radius:4px;background:var(--paper);font-family:var(--mono);font-size:9px;color:var(--mute);padding:4px 5px;display:flex;flex-direction:column;justify-content:space-between}
+  .heat .h1{background:#ECECEA}.heat .h2{background:#D6D6D3}.heat .h3{background:#9A9A97;color:#fff}.heat .h4{background:var(--ink);color:#fff}
+  .heat .hx{background:var(--acc);color:#fff}
+  .heat .e{background:transparent}
+  .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:14px}
+  .dow span{font-family:var(--mono);font-size:9.5px;color:var(--mute);text-align:center}
+
+  /* stream (C) */
+  .feed{list-style:none}
+  .feed li{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line)}
+  .feed .a{font-family:var(--mono);font-size:22px;font-weight:500;letter-spacing:-.04em;min-width:78px}
+  .feed .n{font-size:15px;font-weight:500}
+  .feed .c{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);display:block;margin-top:2px}
+  .quote{font-size:15px;color:var(--mute);line-height:1.45;padding-left:12px;border-left:1px solid var(--faint)}
+  .check{width:18px;height:18px;border-radius:5px;background:var(--ink);display:grid;place-items:center}
+  .check svg{width:12px;height:12px}
+  .stack{display:flex;height:22px;margin:18px 0 6px;gap:2px}
+  .stack div{height:100%}
+
+  /* onboarding */
+  .field{border:1px solid var(--ink);border-radius:12px;padding:10px 12px 12px;margin-top:6px}
+  .field .v{font-family:var(--mono);font-size:14px;margin-top:4px;display:flex;justify-content:space-between;align-items:center}
+  .step{display:flex;gap:4px;margin:14px 0 26px}
+  .step i{flex:1;height:2px;background:var(--line)}
+  .step i.on{background:var(--ink)}
+
+  /* icons */
+  .icons{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+  .icard{background:#fff;border:1px solid var(--line);padding:22px}
+  .icard .art{display:flex;justify-content:center;padding:18px 0 26px;border-bottom:1px solid var(--line)}
+  .icard .art svg{width:168px;height:168px;border-radius:38px;display:block}
+  .icard .sizes{display:flex;align-items:flex-end;gap:16px;padding:16px 0;border-bottom:1px solid var(--line)}
+  .icard .sizes svg{display:block}
+  .icard h3{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-top:14px}
+  .icard p{color:var(--mute);font-size:13px;margin-top:4px}
+  .springboard{margin-top:28px;background:#1C1C1E;border-radius:28px;padding:28px 30px;display:grid;grid-template-columns:repeat(6,1fr);gap:22px 10px;max-width:560px}
+  .app{display:flex;flex-direction:column;align-items:center;gap:6px;color:#fff;font-size:11px}
+  .app .ic{width:60px;height:60px;border-radius:14px;overflow:hidden;background:#3A3A3C}
+  .app .ic svg{width:60px;height:60px;display:block}
+
+  .arch{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--ink);margin-top:6px}
+  .arch div{padding:16px 16px 18px 0;border-right:1px solid var(--line);margin-right:16px}
+  .arch div:last-child{border-right:0}
+  .arch b{display:block;font-size:16px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+  .arch p{font-size:13px;color:var(--ink2)}
+  .decide{margin-top:40px;border:1px solid var(--ink);background:#fff;padding:22px 24px}
+  .decide ol{margin-left:18px;margin-top:8px}
+  .decide li{margin:6px 0;font-size:14.5px}
+  @media (max-width:820px){
+    header.board{grid-template-columns:1fr}header.board .meta{text-align:left}
+    header.board h1{font-size:40px}
+    .intro,.icons,.arch{grid-template-columns:1fr}
+    .intro div,.arch div{border-right:0;border-bottom:1px solid var(--line);margin-right:0}
+    .vhead{grid-template-columns:56px 1fr}.vhead .tag{grid-column:2;justify-self:start}
+    .vhead .num{font-size:32px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="board">
+  <h1>Tally<span style="color:var(--acc)">.</span><br><span style="font-weight:500;color:var(--mute);font-size:.5em;letter-spacing:-.03em">Design round 01</span></h1>
+  <div class="meta">Expense tracker · Web app / PWA<br>Swiss, softened · Geist + Geist Mono<br>One accent #FF4F00 · CHF<br>05 Oct 2026</div>
+</header>
+
+<div class="intro">
+  <div><div class="k">Brief</div><p>Logging an expense should take one sentence or one tap. You type or say it, and Gemini turns it into an entry.</p></div>
+  <div><div class="k">Style</div><p>Swiss, but toned down: white background, thin rules, mono numbers. Corners are soft and spacing is generous. Orange only marks something live (recording, AI-filled, top category).</p></div>
+  <div><div class="k">How to review</div><p>Three layouts below, scroll each row sideways. Pick one, or mix parts (e.g. A's home with C's month view). Then pick an icon.</p></div>
+</div>
+
+<!-- ======================= SHARED ONBOARDING ======================= -->
+<section class="v">
+  <div class="vhead"><div class="num">00</div><div><h2>Setup (same for every layout)</h2><p>On first launch the app asks for your Google AI Studio key. Two steps: key, then currency and categories.</p></div><div class="tag">Shared</div></div>
+  <div class="row">
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="step"><i class="on"></i><i></i></div>
+          <div class="lbl">Step 01 / 02</div>
+          <h3 style="font-size:34px;font-weight:700;letter-spacing:-.035em;line-height:1;margin:10px 0 14px">Bring your<br>own key.</h3>
+          <p style="color:var(--ink2);font-size:14.5px;max-width:30ch">Tally uses Gemini to read what you type, say, or photograph. Paste a key from Google AI Studio. The free tier is enough.</p>
+          <div style="margin-top:26px" class="lbl">Google AI Studio API key</div>
+          <div class="field"><div class="v"><span>AIza••••••••••••••Qx4</span><span class="pill">Paste</span></div></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px;font-family:var(--mono);font-size:11px"><span class="dot" style="background:#1A7F37"></span>Key works · gemini-2.5-flash</div>
+          <a style="margin-top:22px;font-size:14px;color:var(--ink);text-decoration:underline;text-underline-offset:3px">Get a key at aistudio.google.com →</a>
+          <div style="margin-top:auto;padding-bottom:40px">
+            <p style="font-size:12px;color:var(--mute);margin-bottom:12px">Your key stays on this device and is only sent to Google.</p>
+            <div class="btn primary">Continue</div>
+          </div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>00.1 — API key</span><span>Validated live</span></div>
+    </div>
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="step"><i class="on"></i><i class="on"></i></div>
+          <div class="lbl">Step 02 / 02</div>
+          <h3 style="font-size:34px;font-weight:700;letter-spacing:-.035em;line-height:1;margin:10px 0 22px">A few<br>defaults.</h3>
+          <div class="kv">
+            <div>Currency</div><div style="display:flex;justify-content:space-between">CHF — Swiss franc <span class="mono" style="color:var(--mute)">▾</span></div>
+            <div>Language</div><div style="display:flex;justify-content:space-between">Auto (EN / FR) <span class="mono" style="color:var(--mute)">▾</span></div>
+            <div>Budget</div><div class="mono">2 000.00 / month</div>
+          </div>
+          <div style="margin-top:22px" class="lbl">Categories — tap to remove</div>
+          <div class="chips" style="margin-top:10px">
+            <span class="pill on">Groceries</span><span class="pill on">Dining</span><span class="pill on">Transport</span><span class="pill on">Home</span><span class="pill on">Health</span><span class="pill on">Fun</span><span class="pill on">Shopping</span><span class="pill on">Bills</span><span class="pill">+ Add</span>
+          </div>
+          <div style="margin-top:auto;padding-bottom:40px"><div class="btn primary">Start logging</div></div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>00.2 — Defaults</span><span>Editable later</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= A — LEDGER ======================= -->
+<section class="v">
+  <div class="vhead"><div class="num">A</div><div><h2>Ledger</h2><p>A list of entries with one input bar at the bottom, like a message box. The month total sits on top. The closest to a classic expense app.</p></div><div class="tag">Safe pick</div></div>
+  <div class="row">
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span class="wordmark"><svg data-icon="coin"></svg>Tally</span><span>Oct 2026</span></div>
+          <div style="padding:22px 0 18px">
+            <div class="lbl">Spent this month</div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><span class="big" style="font-size:58px">1 284<span style="color:var(--faint)">.60</span></span><span class="cur">CHF</span></div>
+            <div style="display:flex;justify-content:space-between;margin-top:14px" class="mono"><span style="font-size:11px;color:var(--mute)">64% OF 2 000</span><span style="font-size:11px;color:var(--mute)">26 DAYS LEFT</span></div>
+            <div class="track" style="margin-top:6px"><div class="fill" style="width:64%"></div></div>
+          </div>
+          <div class="daygrp"><span>Today</span><span>22.40</span></div>
+          <ul class="entries">
+            <li><span class="t">18:05</span><span><span class="n">TPG ticket</span><span class="c">Transport</span></span><span class="a">3.00</span></li>
+            <li><span class="t">12:40</span><span><span class="n">Migros lunch</span><span class="c">Groceries</span></span><span class="a">14.90</span></li>
+            <li><span class="t">09:12</span><span><span class="n">Coffee</span><span class="c">Dining</span></span><span class="a">4.50</span></li>
+          </ul>
+          <div class="daygrp"><span>Sun 04</span><span>68.20</span></div>
+          <ul class="entries">
+            <li><span class="t">20:30</span><span><span class="n">Cinema, Pathé</span><span class="c">Fun</span></span><span class="a">19.50</span></li>
+          </ul>
+          <div class="composer"><div class="cbox"><span class="ph">Coffee 4.50 — or just talk</span><span class="ibtn ghost"><svg data-i="cam"></svg></span><span class="ibtn dark"><svg data-i="mic"></svg></span></div></div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>A.1 — Home</span><span>Type or tap mic</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span class="wordmark"><svg data-icon="coin"></svg>Tally</span><span>Oct 2026</span></div>
+          <div style="padding:22px 0"><div class="lbl">Spent this month</div><div class="big" style="font-size:58px;margin-top:6px">1 284<span style="color:var(--faint)">.60</span></div></div>
+          <div class="dim"></div>
+          <div class="sheet">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl" style="color:var(--acc)">● Listening · 0:06</span><span class="lbl">Release to send</span></div>
+            <div class="wave" style="margin:12px 0 10px" data-wave="46"></div>
+            <p class="quote" style="color:var(--ink2)">"Dinner at Bains des Pâquis with Léa, forty-two francs, we split it"</p>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 6px"><span class="lbl">Gemini parsed</span><span class="pill"><span class="dot"></span>AI</span></div>
+            <div class="kv">
+              <div>Amount</div><div class="mono" style="font-size:20px;font-weight:500">21.00 <span class="cur">CHF</span></div>
+              <div>What</div><div>Dinner, Bains des Pâquis</div>
+              <div>Category</div><div>Dining</div>
+              <div>When</div><div class="mono" style="font-size:13px">Today, 20:14</div>
+              <div>Note</div><div style="color:var(--mute)">Split with Léa · 42.00 total</div>
+            </div>
+            <div class="btns"><div class="btn">Edit</div><div class="btn primary">Save</div></div>
+          </div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>A.2 — Voice → confirm</span><span>One sheet</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span>← Back</span><span>Overview</span></div>
+          <div class="tabs"><div>Week</div><div class="on">Month</div><div>Year</div></div>
+          <div class="lbl">October 2026</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin:6px 0 18px"><span class="big" style="font-size:46px">1 284.60</span><span class="cur">CHF</span></div>
+          <ul class="bars">
+            <li><div class="top"><b>Groceries</b><span>412.30</span></div><div class="track"><div class="fill" style="width:100%;background:var(--acc)"></div></div></li>
+            <li><div class="top"><b>Dining</b><span>286.10</span></div><div class="track"><div class="fill" style="width:69%"></div></div></li>
+            <li><div class="top"><b>Bills</b><span>240.00</span></div><div class="track"><div class="fill" style="width:58%"></div></div></li>
+            <li><div class="top"><b>Transport</b><span>148.80</span></div><div class="track"><div class="fill" style="width:36%"></div></div></li>
+            <li><div class="top"><b>Fun</b><span>119.40</span></div><div class="track"><div class="fill" style="width:29%"></div></div></li>
+            <li><div class="top"><b>Shopping</b><span>78.00</span></div><div class="track"><div class="fill" style="width:19%"></div></div></li>
+          </ul>
+          <div style="margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--mute)">EXPORT CSV →</div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>A.3 — Month</span><span>Category bars</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= B — NUMERAL ======================= -->
+<section class="v">
+  <div class="vhead"><div class="num">B</div><div><h2>Numeral</h2><p>Opens straight to a big number and a keypad, like a calculator. Tap the amount and a category, done. Hold the black bar to say it instead.</p></div><div class="tag acc">Fastest log</div></div>
+  <div class="row">
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span class="wordmark"><svg data-icon="coin"></svg>Tally</span><span>Today 22.40</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:16px">
+            <div class="lbl">New expense · CHF</div>
+            <div class="big" style="font-size:84px;margin-top:6px">4.50<span class="caret"></span></div>
+            <div style="margin-top:8px;color:var(--faint);font-size:15px">Add a note…</div>
+          </div>
+          <div class="chips" style="padding-bottom:14px"><span class="pill">Groceries</span><span class="pill on">Dining</span><span class="pill">Transport</span><span class="pill">Fun</span><span class="pill">···</span></div>
+          <div class="keypad"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>.</div><div>0</div><div>⌫</div></div>
+          <div class="hold"><svg data-i="mic"></svg>Hold to say it</div>
+          <div style="height:34px"></div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>B.1 — Entry</span><span>Keypad first</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span class="wordmark"><svg data-icon="coin"></svg>Tally</span><span style="color:var(--acc)">● AI filled</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:16px">
+            <p class="quote" style="margin-bottom:20px">"Dinner at Bains des Pâquis with Léa, forty-two, we split it"</p>
+            <div class="lbl">Your share · CHF</div>
+            <div class="big" style="font-size:84px;margin-top:6px">21.00</div>
+            <div style="margin-top:8px;font-size:15px">Dinner, Bains des Pâquis <span style="color:var(--mute)">· split w/ Léa</span></div>
+          </div>
+          <div class="chips" style="padding-bottom:14px"><span class="pill">Groceries</span><span class="pill on">Dining</span><span class="pill">Transport</span><span class="pill">Fun</span><span class="pill">···</span></div>
+          <div class="keypad" style="opacity:.35"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>.</div><div>0</div><div>⌫</div></div>
+          <div class="hold" style="background:var(--acc)">Log 21.00 →</div>
+          <div style="height:34px"></div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>B.2 — Voice filled it</span><span>Same screen</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span>← Log</span><span>October</span></div>
+          <div style="padding:20px 0 4px"><div class="lbl">Month to date</div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><span class="big" style="font-size:52px">1 284.60</span><span class="cur">CHF</span></div>
+            <div class="mono" style="font-size:11px;color:var(--mute);margin-top:6px">AVG 256.92 / WEEK · PEAK SAT 03</div>
+          </div>
+          <div class="dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+          <div class="heat" data-heat></div>
+          <div class="daygrp" style="margin-top:18px"><span>Sat 03 · Top day</span><span>184.70</span></div>
+          <ul class="entries">
+            <li><span class="t">11:20</span><span><span class="n">Coop weekly shop</span><span class="c">Groceries</span></span><span class="a">96.40</span></li>
+            <li><span class="t">19:45</span><span><span class="n">Birthday gift</span><span class="c">Shopping</span></span><span class="a">88.30</span></li>
+          </ul>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>B.3 — Month</span><span>Calendar heatmap</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= C — STREAM ======================= -->
+<section class="v">
+  <div class="vhead"><div class="num">C</div><div><h2>Stream</h2><p>Text first. Write one sentence or a whole day ("groceries 23.40, coffee 4, train to Lausanne") and Gemini splits it into entries. You can also snap a receipt. The month view reads like a short report.</p></div><div class="tag">Most AI-native</div></div>
+  <div class="row">
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-top:6px">
+            <div><div style="font-size:52px;font-weight:800;letter-spacing:-.05em;line-height:.9">Mon<br>05<span style="color:var(--acc)">.</span></div></div>
+            <div style="text-align:right"><div class="lbl">Today</div><div class="big" style="font-size:28px;margin-top:4px">22.40</div><div class="lbl" style="margin-top:10px">Month</div><div class="mono" style="font-size:14px;margin-top:2px">1 284.60</div></div>
+          </div>
+          <div class="hair" style="margin:18px 0 0;background:var(--ink)"></div>
+          <ul class="feed">
+            <li><span class="a">3.00</span><span><span class="n">TPG ticket</span><span class="c">Transport · 18:05</span></span></li>
+            <li><span class="a">14.90</span><span><span class="n">Migros lunch</span><span class="c">Groceries · 12:40</span></span></li>
+            <li><span class="a">4.50</span><span><span class="n">Coffee</span><span class="c">Dining · 09:12</span></span></li>
+          </ul>
+          <div class="composer" style="padding-bottom:30px">
+            <div style="border:1px solid var(--ink);border-radius:16px;padding:14px 14px 8px;background:#fff">
+              <div style="color:var(--faint);font-size:17px;line-height:1.35;min-height:46px">What did you spend?</div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span class="ibtn ghost" style="margin-left:-10px"><svg data-i="cam"></svg></span>
+                <span class="ibtn dark"><svg data-i="mic"></svg></span>
+              </div>
+            </div>
+          </div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>C.1 — Today</span><span>Big date, feed</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span class="wordmark"><svg data-icon="coin"></svg>Tally</span><span>Mon 05</span></div>
+          <div class="lbl" style="margin-top:20px">You wrote</div>
+          <p class="quote" style="margin-top:8px;color:var(--ink2);font-size:16px">groceries 23.40 at coop, a coffee for 4 and the train to Lausanne 22.80 half fare</p>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin:26px 0 4px"><span class="lbl">3 entries found</span><span class="pill"><span class="dot"></span>Gemini</span></div>
+          <ul class="feed" style="border-top:1px solid var(--ink)">
+            <li style="grid-template-columns:auto auto 1fr"><span class="check"><svg data-i="ok"></svg></span><span class="a">23.40</span><span><span class="n">Coop</span><span class="c">Groceries</span></span></li>
+            <li style="grid-template-columns:auto auto 1fr"><span class="check"><svg data-i="ok"></svg></span><span class="a">4.00</span><span><span class="n">Coffee</span><span class="c">Dining</span></span></li>
+            <li style="grid-template-columns:auto auto 1fr"><span class="check"><svg data-i="ok"></svg></span><span class="a">22.80</span><span><span class="n">Train → Lausanne</span><span class="c">Transport · ½ fare</span></span></li>
+          </ul>
+          <div style="display:flex;justify-content:space-between;margin-top:14px" class="mono"><span class="lbl">Total</span><span style="font-size:16px;font-weight:500">50.20 CHF</span></div>
+          <div style="margin-top:auto;padding-bottom:40px" class="btns"><div class="btn">Edit</div><div class="btn primary">Log 3 entries</div></div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>C.2 — Many in one</span><span>Batch parse</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="sb">9:41<i>●●● 5G ▮</i></div>
+        <div class="scr">
+          <div class="topline"><span>← Today</span><span>Report</span></div>
+          <div class="lbl" style="margin-top:22px">October so far</div>
+          <p style="font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1.12;margin-top:10px">You spent <span class="mono" style="font-weight:500;letter-spacing:-.04em">1 284.60</span> CHF. <span style="color:var(--acc)">Groceries</span> led at 32%, dining is up on September.</p>
+          <div class="stack">
+            <div style="flex:412;background:var(--acc)"></div><div style="flex:286;background:var(--ink)"></div><div style="flex:240;background:#5A5A58"></div><div style="flex:149;background:#9A9A97"></div><div style="flex:119;background:#C4C4C1"></div><div style="flex:78;background:#E2E2DF"></div>
+          </div>
+          <ul class="entries" style="margin-top:8px">
+            <li style="grid-template-columns:14px 1fr auto"><span style="width:8px;height:8px;background:var(--acc);display:block;margin-top:4px"></span><span class="n">Groceries</span><span class="a">412.30</span></li>
+            <li style="grid-template-columns:14px 1fr auto"><span style="width:8px;height:8px;background:var(--ink);display:block;margin-top:4px"></span><span class="n">Dining <span class="mono" style="font-size:11px;color:var(--mute)">+18%</span></span><span class="a">286.10</span></li>
+            <li style="grid-template-columns:14px 1fr auto"><span style="width:8px;height:8px;background:#5A5A58;display:block;margin-top:4px"></span><span class="n">Bills</span><span class="a">240.00</span></li>
+            <li style="grid-template-columns:14px 1fr auto"><span style="width:8px;height:8px;background:#9A9A97;display:block;margin-top:4px"></span><span class="n">Transport</span><span class="a">148.80</span></li>
+            <li style="grid-template-columns:14px 1fr auto"><span style="width:8px;height:8px;background:#C4C4C1;display:block;margin-top:4px"></span><span class="n">Fun</span><span class="a">119.40</span></li>
+          </ul>
+          <div class="cbox" style="margin-top:16px;border-color:var(--line)"><span class="ph" style="font-size:13.5px">Ask: "how much on coffee this month?"</span></div>
+        </div><div class="home-ind"></div></div>
+      <div class="cap"><span>C.3 — Report</span><span>Ask your data</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= ICONS ======================= -->
+<section class="v">
+  <div class="vhead"><div class="num">◼</div><div><h2>Pixel app icon</h2><p>16×16 pixel art with hard edges, shown at App Store size and home-screen size.</p></div><div class="tag">Pick one</div></div>
+  <div class="icons">
+    <div class="icard"><div class="art"><svg data-icon="coin"></svg></div><div class="sizes" data-sizes="coin"></div><h3>I1 — Mic Coin</h3><p>An orange coin with a microphone. Says "money" and "voice" in one shape.</p></div>
+    <div class="icard"><div class="art"><svg data-icon="receipt"></svg></div><div class="sizes" data-sizes="receipt"></div><h3>I2 — Receipt</h3><p>A white receipt with a torn edge on black. The orange bar is the total.</p></div>
+    <div class="icard"><div class="art"><svg data-icon="tally"></svg></div><div class="sizes" data-sizes="tally"></div><h3>I3 — Tally Marks</h3><p>Four strokes and a slash, the oldest way to count. Plays on the name.</p></div>
+  </div>
+  <div class="springboard" id="spring"></div>
+</section>
+
+<!-- ======================= STACK ======================= -->
+<section class="v">
+  <div class="vhead"><div class="num">→</div><div><h2>Proposed stack</h2><p>Everything runs on Cloudflare's free tier. The backend gets built once you sign off on the design.</p></div><div class="tag">Proposal</div></div>
+  <div class="arch">
+    <div><b>Workers</b><p>One Worker serves the PWA and a small JSON API (<span class="mono">/api/entries</span>). Free tier: 100k requests/day.</p></div>
+    <div><b>D1 (SQLite)</b><p>Cloudflare's free database: 5 GB and 5M reads/day. Plenty for a personal ledger. Tables: entries, categories, settings.</p></div>
+    <div><b>Gemini, from the device</b><p>Audio, text, or a receipt photo goes straight from the browser to Gemini 2.5 Flash with your key. It returns entries as JSON. The key never reaches our server.</p></div>
+    <div><b>Cloudflare Access</b><p>A login wall with an email one-time code, free for up to 50 users. Only you can open the app or the API.</p></div>
+  </div>
+  <div class="decide">
+    <div class="k">To decide</div>
+    <ol>
+      <li>Layout: <b>A Ledger</b>, <b>B Numeral</b>, <b>C Stream</b>, or a mix.</li>
+      <li>Icon: <b>I1</b>, <b>I2</b> or <b>I3</b>.</li>
+      <li>Name: keep <b>Tally</b>?</li>
+      <li>Just you, or should others be able to sign up?</li>
+    </ol>
+  </div>
+</section>
+
+</div>
+
+<script>
+/* ---------- line icons ---------- */
+const I = {
+  mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 8h3.2l1.6-2.5h7.4L17.3 8h3.2v11h-17z"/><circle cx="12" cy="13" r="3.4"/></svg>',
+  ok:'<svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg>'
+};
+document.querySelectorAll('svg[data-i]').forEach(s=>{s.outerHTML=I[s.dataset.i]});
+
+/* ---------- pixel icons (16×16) ---------- */
+const C = {K:'#0B0B0B', W:'#FFFFFF', O:'#FF4F00', G:'#FFB08A'};
+function fromRows(rows){const c=[];rows.forEach((r,y)=>{r=r.padEnd(16,'.').slice(0,16);[...r].forEach((ch,x)=>{if(ch!=='.')c.push([x,y,C[ch]])})});return c}
+function coin(){
+  const c=[];
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){const d=Math.hypot(x-7.5,y-7.5);if(d<=7.6)c.push([x,y,d>6.4?C.K:C.O])}
+  [[4,4],[3,5],[5,3]].forEach(([x,y])=>c.push([x,y,C.G]));
+  const mic=[[7,3],[8,3],[6,4],[7,4],[8,4],[9,4],[6,5],[7,5],[8,5],[9,5],[6,6],[7,6],[8,6],[9,6],[4,7],[6,7],[7,7],[8,7],[9,7],[11,7],[4,8],[7,8],[8,8],[11,8],[5,9],[10,9],[6,10],[7,10],[8,10],[9,10],[7,11],[8,11],[5,12],[6,12],[7,12],[8,12],[9,12],[10,12]];
+  mic.forEach(([x,y])=>c.push([x,y,C.K]));
+  return {bg:C.W,cells:c};
+}
+function receipt(){
+  return {bg:C.K,cells:fromRows([
+    "................",
+    "...WWWWWWWWWW...",
+    "...WWWWWWWWWW...",
+    "...WKKKKKWWWW...",
+    "...WWWWWWWWWW...",
+    "...WKKKWWWKKW...",
+    "...WWWWWWWWWW...",
+    "...WKKKKWWWKW...",
+    "...WWWWWWWWWW...",
+    "...WOOOOOOOOW...",
+    "...WOOOOOOOOW...",
+    "...WWWWWWWWWW...",
+    "...WWWWWWWWWW...",
+    "...WWWWWWWWWW...",
+    "...W.W.W.W.W....",
+    "................"])};
+}
+function tally(){
+  const c=[];
+  [3,6,9,12].forEach(x=>{for(let y=3;y<=12;y++)c.push([x,y,C.K])});
+  let x0=1,y0=12,x1=14,y1=4,dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=1,sy=-1,err=dx+dy;
+  while(true){c.push([x0,y0,C.W]);c.push([x0,y0+1,C.W]);if(x0===x1&&y0===y1)break;const e2=2*err;if(e2>=dy){err+=dy;x0+=sx}if(e2<=dx){err+=dx;y0+=sy}}
+  return {bg:C.O,cells:c};
+}
+const ICONS={coin:coin(),receipt:receipt(),tally:tally()};
+function svg(name,size){
+  const {bg,cells}=ICONS[name];
+  const r=cells.map(([x,y,f])=>`<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${f}"/>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges"${size?` width="${size}" height="${size}"`:''}><rect width="16" height="16" fill="${bg}"/>${r}</svg>`;
+}
+document.querySelectorAll('svg[data-icon]').forEach(s=>{
+  const cls=s.getAttribute('style')||''; const tmp=document.createElement('div'); tmp.innerHTML=svg(s.dataset.icon);
+  const n=tmp.firstChild; s.replaceWith(n);
+});
+document.querySelectorAll('[data-sizes]').forEach(el=>{
+  const n=el.dataset.sizes;
+  el.innerHTML=[[76,17],[60,14],[40,9],[29,7]].map(([s,r])=>`<div style="text-align:center"><div style="width:${s}px;height:${s}px;border-radius:${r}px;overflow:hidden;${n==='coin'?'box-shadow:0 0 0 1px #E7E7E4':''}">${svg(n,s)}</div><div class="mono" style="font-size:9.5px;color:#7A7A7A;margin-top:6px">${s}</div></div>`).join('');
+});
+const sp=document.getElementById('spring');
+const apps=[['coin','Tally'],['x','Mail'],['receipt','Tally'],['x','Maps'],['tally','Tally'],['x','Photos']];
+sp.innerHTML=apps.map(([n,l])=>`<div class="app"><div class="ic">${n==='x'?'':svg(n,60)}</div>${l}</div>`).join('');
+
+/* ---------- waveform ---------- */
+document.querySelectorAll('[data-wave]').forEach(w=>{
+  let h='';const n=+w.dataset.wave;for(let i=0;i<n;i++){const v=Math.abs(Math.sin(i*.55)*Math.cos(i*.23))*26+4;h+=`<b style="height:${v.toFixed(0)}px;opacity:${i>n-8?.3:1}"></b>`}w.innerHTML=h;
+});
+
+/* ---------- heatmap (Oct 2026 starts Thu) ---------- */
+document.querySelectorAll('[data-heat]').forEach(el=>{
+  const lv=[0,2,4,1,2,3,0,1,2,1,3,2,1,0,2,4,1,2,1,3,2,1,2,0,1,1,2,0,0,0,0];
+  const amt=['','38','184','12','41','62','','18','34','16','71','39','22','','30','92','14','28','19','66','35','11','27','','16','14','29','','','',''];
+  let h='<div class="e"></div><div class="e"></div><div class="e"></div>';
+  for(let d=1;d<=31;d++){const future=d>5;let cls=future?'':('h'+lv[d-1]);if(d===3)cls='hx';
+    h+=`<div class="${cls}" style="${future?'opacity:.45':''}"><span>${d}</span><span>${future?'':amt[d-1]||''}</span></div>`}
+  el.innerHTML=h;
+});
+</script>
+</body>
+</html>
