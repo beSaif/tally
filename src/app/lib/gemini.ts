@@ -94,6 +94,8 @@ export const PARSE_RESPONSE_SCHEMA = {
     reply: { type: 'string', nullable: true },
   },
   required: ['transcript', 'entries'],
+  // Transcript first: with thinking off, writing the words down before extracting helps audio accuracy.
+  propertyOrdering: ['transcript', 'entries', 'reply'],
 } as const;
 
 export type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };

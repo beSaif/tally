@@ -38,7 +38,7 @@ const SPEC_RESPONSE_SCHEMA: unknown = JSON.parse(`{"type":"object","properties":
     "required":["amount","currency","description","category","occurred_at","confidence"],
     "propertyOrdering":["amount","currency","description","category","occurred_at","note","confidence"]}},
   "reply":{"type":"string","nullable":true}},
- "required":["transcript","entries"]}`);
+ "required":["transcript","entries"],"propertyOrdering":["transcript","entries","reply"]}`);
 
 const EXPECTED_INSTRUCTION = [
   'You turn what a person typed, said, or photographed into expense entries.',
