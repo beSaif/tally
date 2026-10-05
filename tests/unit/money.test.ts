@@ -28,6 +28,24 @@ describe('parseAmount', () => {
     expect(parseAmount('CHF 4.50')).toBe(450);
     expect(parseAmount('4.50 chf')).toBe(450);
     expect(parseAmount('1.284,60')).toBe(128460);
+    expect(parseAmount('4.5')).toBe(450);
+    expect(parseAmount('0,99')).toBe(99);
+  });
+  it('reads a lone separator before three digits as thousands', () => {
+    expect(parseAmount('1,000')).toBe(100000);
+    expect(parseAmount('2,500')).toBe(250000);
+    expect(parseAmount('12.000')).toBe(1200000);
+    expect(parseAmount('100,000')).toBe(10000000);
+    expect(parseAmount('CHF 2,500')).toBe(250000);
+    expect(parseAmount('1,000.50')).toBe(100050);
+    expect(parseAmount('1.000,50')).toBe(100050);
+  });
+  it('keeps decimals that are not a thousands group', () => {
+    expect(parseAmount('0,500')).toBe(50); // a leading zero is a fraction
+    expect(parseAmount('0.250')).toBe(25);
+    expect(parseAmount('1,0000')).toBe(100); // four digits after the separator
+    expect(parseAmount('1234,567')).toBe(123457); // four digits before it
+    expect(parseAmount('.500')).toBe(50);
   });
   it('rejects nonsense', () => {
     expect(parseAmount('')).toBeNull();
