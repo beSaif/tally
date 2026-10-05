@@ -4,7 +4,7 @@
  * 00.2) and the sign-in screens. Screenshots: e2e/__screenshots__/screen-*.png.
  */
 import { expect, test } from '@playwright/test';
-import { designAccount, PASSWORD, prepare, seedEntries, shot, signUp, TEST_KEY, uniqueEmail } from './support/fixtures';
+import { designAccount, prepare, seedEntries, shot, signUp, TEST_KEY, uniqueEmail, uniqueSub } from './support/fixtures';
 
 test('home (A.1): month total, budget, days left, day groups; earlier months; refetch when visible', async ({ page }) => {
   await prepare(page, { withKey: true });
@@ -192,26 +192,19 @@ test('settings: every section', async ({ page }) => {
   await shot(page, 'screen-settings-key-change');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-  // Change password, inline.
-  await page.getByRole('button', { name: 'Change', exact: true }).last().click();
-  await page.getByLabel('Current password').fill('not it at all');
-  await page.getByLabel('New password').fill('a much better one');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByText('That password is not right.')).toBeVisible();
-  await page.getByLabel('Current password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.locator('.toast')).toHaveText('Password changed.');
+  // Account: the Google address, no password to change.
+  await expect(page.getByText('With Google')).toBeVisible();
 
   // Delete account: confirmed by typing the email.
   await page.getByRole('button', { name: 'Delete account' }).click();
   const forever = page.getByRole('button', { name: 'Delete forever' });
   await expect(forever).toBeDisabled();
-  await page.getByLabel('Email', { exact: true }).last().fill(account.email);
-  await page.getByLabel('Password', { exact: true }).fill('a much better one');
+  await page.getByLabel('Email', { exact: true }).fill(account.email.toUpperCase());
+  await expect(forever).toBeEnabled();
   await page.getByRole('heading', { name: 'Account' }).scrollIntoViewIfNeeded();
   await shot(page, 'screen-settings-delete');
   await forever.click();
-  await expect(page).toHaveURL(/\/signup$/);
+  await expect(page).toHaveURL(/\/login$/);
   expect((await page.request.get('/api/auth/me')).status()).toBe(401);
 });
 
@@ -242,31 +235,34 @@ test('settings: the key is checked once when shown and once per model edit, neve
   expect(checked().slice(before)).toEqual(['gemini-2.5-flash-lite']);
 });
 
-test('setup (00.1, 00.2) and sign-in screens', async ({ page }) => {
-  await prepare(page);
+test('setup (00.1, 00.2), sign-in and privacy screens', async ({ page }) => {
+  const { google } = await prepare(page);
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
   await shot(page, 'screen-login');
-  await page.getByLabel('Email').fill(uniqueEmail('nobody'));
-  await page.getByLabel('Password').fill('not the password');
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page.getByRole('alert')).toHaveText('That email or password is not right.');
+
+  // Back from Google without a session: the screen says why.
+  await page.goto('/login?error=failed');
+  await expect(page.getByRole('alert')).toHaveText('Google could not sign you in. Try again.');
   await shot(page, 'screen-login-error');
+  google.cancelNext = true;
+  await page.getByRole('link', { name: 'Continue with Google' }).click();
+  await expect(page).toHaveURL(/\/login\?error=cancelled$/);
+  await expect(page.getByRole('alert')).toHaveText('Sign-in was cancelled. Try again whenever you like.');
+  expect((await page.request.get('/api/auth/me')).status()).toBe(401);
 
-  // Signing up with an email that already has an account.
-  const taken = uniqueEmail('taken');
-  await signUp(page, { email: taken });
-  await page.request.post('/api/auth/logout');
-  await page.goto('/signup');
-  await page.getByLabel('Email').fill(taken);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Show' }).click();
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page.getByRole('alert')).toHaveText('There is already an account for this email.');
-  await shot(page, 'screen-signup-taken');
+  // The privacy policy is readable before signing in.
+  await page.getByRole('link', { name: 'Privacy policy' }).click();
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(page.getByRole('heading', { name: 'Privacy' })).toBeVisible();
+  await expect(page.getByText('Your Google password never touches Tally.')).toBeVisible();
+  await shot(page, 'screen-privacy', { fullPage: true });
+  await page.getByRole('button', { name: '← Back' }).click();
+  await expect(page).toHaveURL(/\/login/);
 
-  await page.getByLabel('Email').fill(uniqueEmail('setup'));
-  await page.getByRole('button', { name: 'Create account' }).click();
+  // A Google account Tally has never seen lands in setup.
+  google.nextUser = { sub: uniqueSub(), email: uniqueEmail('setup') };
+  await page.getByRole('link', { name: 'Continue with Google' }).click();
   await expect(page.getByText('Step 01 / 02')).toBeVisible();
   await shot(page, 'screen-setup-key-empty');
   await page.getByLabel('Google AI Studio API key').fill(TEST_KEY);
@@ -277,26 +273,6 @@ test('setup (00.1, 00.2) and sign-in screens', async ({ page }) => {
   await page.getByLabel('Budget').fill('2000');
   await page.getByLabel('Budget').blur();
   await shot(page, 'screen-setup-defaults');
-});
-
-test('sign-up screen when the server asks for an invite code', async ({ page }) => {
-  // The local Worker runs without INVITE_CODE, so this one answer is forced: everything else is real.
-  await page.route('**/api/auth/signup', (route) =>
-    route.request().postDataJSON()?.invite_code
-      ? route.continue()
-      : route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: { code: 'invite_required', message: 'An invite code is required' } }) }),
-  );
-  await prepare(page);
-  await page.goto('/signup');
-  await page.getByLabel('Email').fill(uniqueEmail('invite'));
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page.getByRole('alert')).toHaveText('This Tally needs an invite code.');
-  await expect(page.getByLabel('Invite code')).toBeVisible();
-  await shot(page, 'screen-signup-invite');
-  await page.getByLabel('Invite code').fill('anything');
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page).toHaveURL(/\/setup$/);
 });
 
 test('install: Settings uses the captured prompt; the first log offers it once', async ({ page }) => {

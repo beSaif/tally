@@ -5,7 +5,7 @@ name: Deploy
 #   CLOUDFLARE_API_TOKEN   — token with "Edit Cloudflare Workers" + D1 edit permissions
 #   CLOUDFLARE_ACCOUNT_ID  — your account id (Workers & Pages overview → Account details)
 # One-time setup (locally): npm run setup:cloudflare  (creates the D1 database, writes its id into wrangler.jsonc)
-#                           wrangler secret put VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT [/ INVITE_CODE]
+#                           wrangler secret put VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 
 on:
   push:

@@ -1,14 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
+import { FAKE_GOOGLE_CLIENT_ID, FAKE_GOOGLE_PORT } from './e2e/support/fake-google';
 
 /**
  * End-to-end tests against the real Worker API: `wrangler dev` serving the built app on E2E_PORT
- * (default 8787), with Gemini mocked per test (e2e/support/mock-gemini.ts) and a fake push service
+ * (default 8787), with Gemini mocked per test (e2e/support/mock-gemini.ts), a stand-in Google for
+ * sign-in (e2e/support/fake-google.ts, on E2E_GOOGLE_PORT) and a fake push service
  * (e2e/support/fake-push.ts + push-sink.ts). Screenshots of every screen and state go to
  * e2e/__screenshots__/ (390×844 @2x). A server already listening on E2E_PORT is reused locally;
- * it must serve a fresh `npm run build`.
+ * it must serve a fresh `npm run build` and have been started with the same `--var` flags.
  */
 const PORT = Number(process.env.E2E_PORT ?? 8787);
 const baseURL = `http://127.0.0.1:${PORT}`;
+const GOOGLE_VARS = [
+  `GOOGLE_CLIENT_ID:${FAKE_GOOGLE_CLIENT_ID}`,
+  'GOOGLE_CLIENT_SECRET:tally-e2e-secret',
+  `GOOGLE_AUTH_URL:http://127.0.0.1:${FAKE_GOOGLE_PORT}/authorize`,
+  `GOOGLE_TOKEN_URL:http://127.0.0.1:${FAKE_GOOGLE_PORT}/token`,
+]
+  .map((v) => `--var ${v}`)
+  .join(' ');
 
 export default defineConfig({
   testDir: 'e2e',
@@ -37,7 +47,7 @@ export default defineConfig({
   },
   projects: [{ name: 'e2e' }],
   webServer: {
-    command: `npm run vapid && npm run build && npm run db:migrate:local && npx wrangler dev --port ${PORT} --test-scheduled`,
+    command: `npm run vapid && npm run build && npm run db:migrate:local && npx wrangler dev --port ${PORT} --test-scheduled ${GOOGLE_VARS}`,
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

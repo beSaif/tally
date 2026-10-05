@@ -2,6 +2,7 @@
  * Typed client for the Worker API (spec §6). JSON in/out, cookie session (same origin).
  * Errors become `ApiError` with the server's code; a network failure is the `offline` code.
  * A 401 `unauthorized` means the session is gone: the registered handler logs the app out.
+ * Signing in is not a call: the browser leaves for `/api/auth/google/start` and comes back signed in.
  */
 import type {
   Bootstrap,
@@ -11,17 +12,13 @@ import type {
   Entry,
   EntryPatch,
   ErrorCode,
-  LoginInput,
   NewEntry,
-  PasswordChangeInput,
   PushSubscriptionInput,
   PushSubscriptionRow,
   ResolvedLanguage,
   Settings,
   SettingsInput,
-  SignupInput,
   Summary,
-  User,
 } from '@shared/api';
 
 export type ApiErrorCode = ErrorCode | 'offline' | 'http';
@@ -53,10 +50,7 @@ export function setApiHandlers(h: Handlers): void {
   Object.assign(handlers, h);
 }
 
-const KNOWN_CODES: ReadonlySet<string> = new Set<ErrorCode>([
-  'unauthorized', 'invalid_credentials', 'email_taken', 'invite_required', 'signups_disabled',
-  'validation', 'not_found', 'rate_limited', 'forbidden', 'internal',
-]);
+const KNOWN_CODES: ReadonlySet<string> = new Set<ErrorCode>(['unauthorized', 'validation', 'not_found', 'rate_limited', 'forbidden', 'internal']);
 
 function codeFor(status: number, body: unknown): ApiErrorCode {
   const code = (body as { error?: { code?: unknown } } | null)?.error?.code;
@@ -126,11 +120,10 @@ export interface SummaryQuery {
 
 export const api = {
   // ---- auth ----
+  /** A full-page navigation (not a fetch): the Worker sends the browser on to Google and back. */
+  googleSignInUrl: (lang: ResolvedLanguage) => `/api/auth/google/start${q({ lang })}`,
   me: (opts?: RequestOptions) => request<Bootstrap>('GET', '/auth/me', undefined, opts),
-  signup: (body: SignupInput) => request<{ user: User }>('POST', '/auth/signup', body),
-  login: (body: LoginInput) => request<{ user: User }>('POST', '/auth/login', body),
   logout: () => request<void>('POST', '/auth/logout', undefined, { quiet401: true }),
-  changePassword: (body: PasswordChangeInput) => request<void>('POST', '/auth/password', body),
   deleteAccount: (body: DeleteAccountInput) => request<void>('DELETE', '/auth/account', body),
 
   // ---- settings & categories ----

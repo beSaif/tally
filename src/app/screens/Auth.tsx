@@ -1,61 +1,43 @@
-/** Sign up / Log in (spec §3.1): same visual language as setup. */
-import { useState } from 'preact/hooks';
+/** Sign in (spec §3.1): one screen, one button; Google does the identifying. */
+import { useEffect, useState } from 'preact/hooks';
+import type { SignInError } from '@shared/api';
 import { lang, t, type TKey } from '../i18n';
-import { api, isApiError } from '../lib/api';
-import { bootstrap, sessionState } from '../lib/store';
-import { linkTo } from '../router';
+import { api } from '../lib/api';
+import { linkTo, route } from '../router';
 import { Lines } from '../components/Controls';
 import Wordmark from '../components/Wordmark';
 
-const ERRORS: Partial<Record<string, TKey>> = {
-  invalid_credentials: 'auth.err.invalid_credentials',
-  email_taken: 'auth.err.email_taken',
-  invite_required: 'auth.err.invite_required',
+const ERRORS: Record<SignInError | 'offline', TKey> = {
+  cancelled: 'auth.err.cancelled',
+  failed: 'auth.err.failed',
   signups_disabled: 'auth.err.signups_disabled',
-  rate_limited: 'auth.err.rate_limited',
-  validation: 'auth.err.validation',
   offline: 'auth.err.offline',
 };
+type ErrorKind = keyof typeof ERRORS;
+const isErrorKind = (s: string | null): s is ErrorKind => s !== null && Object.hasOwn(ERRORS, s);
 
-export default function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
-  const signup = mode === 'signup';
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [invite, setInvite] = useState('');
-  const [needInvite, setNeedInvite] = useState(false);
-  const [reveal, setReveal] = useState(false);
+export default function AuthScreen() {
+  // The Worker lands here with `?error=` when a sign-in did not go through.
+  const fromServer = route.value.query.get('error');
+  const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<TKey | null>(null);
+  const error: ErrorKind | null = offline ? 'offline' : isErrorKind(fromServer) ? fromServer : null;
 
-  const submit = async (e: Event) => {
-    e.preventDefault();
-    if (busy) return;
-    const cleanEmail = email.trim();
-    if (!/^\S+@\S+\.\S+$/.test(cleanEmail) || (signup && password.length < 8) || !password) {
-      setError(signup ? 'auth.err.validation' : 'auth.err.invalid_credentials');
+  // Coming back with the back button can restore the page from cache, busy state included.
+  useEffect(() => {
+    const reset = () => setBusy(false);
+    window.addEventListener('pageshow', reset);
+    return () => window.removeEventListener('pageshow', reset);
+  }, []);
+
+  const go = (e: MouseEvent) => {
+    if (!navigator.onLine) {
+      e.preventDefault();
+      setOffline(true);
       return;
     }
+    // The page is about to leave; while a slow server answers, the button says so.
     setBusy(true);
-    setError(null);
-    try {
-      if (signup) {
-        await api.signup({ email: cleanEmail, password, language: lang.value, ...(needInvite && invite.trim() ? { invite_code: invite.trim() } : {}) });
-      } else {
-        await api.login({ email: cleanEmail, password });
-      }
-      // The gate takes it from here: /setup when this device has no key or setup is unfinished, else home.
-      await bootstrap();
-      if (sessionState.value !== 'authed') {
-        // Signed in, but the session could not be loaded (connection dropped): let the person retry.
-        setError('auth.err.generic');
-        setBusy(false);
-      }
-    } catch (err) {
-      const code = isApiError(err) ? err.code : 'internal';
-      if (code === 'invite_required') setNeedInvite(true);
-      setError(ERRORS[code] ?? 'auth.err.generic');
-      setBusy(false);
-    }
   };
 
   return (
@@ -64,81 +46,23 @@ export default function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
         <Wordmark />
       </div>
       <h1 class="h1 headline">
-        <Lines text={signup ? t('auth.signupTitle') : t('auth.loginTitle')} />
+        <Lines text={t('auth.title')} />
       </h1>
       <p class="lead">{t('auth.lead')}</p>
-      <form class="auth-form" onSubmit={submit} noValidate>
-        <label class="lbl first" for="auth-email">
-          {t('auth.email')}
-        </label>
-        <div class="field">
-          <div class="v">
-            <input
-              id="auth-email"
-              type="email"
-              name="email"
-              autocomplete={signup ? 'email' : 'username'}
-              autocapitalize="off"
-              spellcheck={false}
-              inputMode="email"
-              value={email}
-              onInput={(e) => setEmail(e.currentTarget.value)}
-              required
-            />
-          </div>
-        </div>
-        <label class="lbl" for="auth-password">
-          {t('auth.password')}
-        </label>
-        <div class="field">
-          <div class="v">
-            <input
-              id="auth-password"
-              type={reveal ? 'text' : 'password'}
-              name="password"
-              autocomplete={signup ? 'new-password' : 'current-password'}
-              minLength={signup ? 8 : undefined}
-              aria-describedby={signup ? 'auth-pw-hint' : undefined}
-              value={password}
-              onInput={(e) => setPassword(e.currentTarget.value)}
-              required
-            />
-            <button type="button" class="pill" aria-pressed={reveal} onClick={() => setReveal(!reveal)}>
-              {reveal ? t('auth.hide') : t('auth.show')}
-            </button>
-          </div>
-        </div>
-        {signup ? (
-          <p class="hint" id="auth-pw-hint">
-            {t('auth.passwordHint')}
-          </p>
-        ) : null}
-        {signup && needInvite ? (
-          <>
-            <label class="lbl" for="auth-invite">
-              {t('auth.inviteCode')}
-            </label>
-            <div class="field">
-              <div class="v">
-                <input id="auth-invite" type="text" name="invite" autocomplete="off" autocapitalize="off" value={invite} onInput={(e) => setInvite(e.currentTarget.value)} />
-              </div>
-            </div>
-          </>
-        ) : null}
-        {error ? (
-          <p class="err auth-err" role="alert">
-            {t(error)}
-          </p>
-        ) : null}
-        <div class="bottom">
-          <button type="submit" class="btn primary" disabled={busy} aria-busy={busy}>
-            {busy ? '…' : signup ? t('auth.createAccount') : t('auth.logIn')}
-          </button>
-          <a class="link auth-switch" href={signup ? '/login' : '/signup'} onClick={linkTo(signup ? '/login' : '/signup')}>
-            {signup ? t('auth.haveAccount') : t('auth.newHere')}
-          </a>
-        </div>
-      </form>
+      {error ? (
+        <p class="err auth-err" role="alert">
+          {t(ERRORS[error])}
+        </p>
+      ) : null}
+      <div class="bottom auth-bottom">
+        <p class="note">{t('auth.note')}</p>
+        <a class="btn primary" href={api.googleSignInUrl(lang.value)} aria-busy={busy} onClick={go}>
+          {busy ? '…' : t('auth.google')}
+        </a>
+        <a class="link auth-switch" href="/privacy" onClick={linkTo('/privacy')}>
+          {t('auth.privacy')}
+        </a>
+      </div>
     </main>
   );
 }

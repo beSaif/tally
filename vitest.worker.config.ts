@@ -8,6 +8,8 @@ const TEST_VAPID = {
   VAPID_PRIVATE_KEY: '9S-jzXSVB5AlWjyA0o4A_qNOgkzqyt8O7_oA7zbk9dY',
   VAPID_SUBJECT: 'mailto:tests@tally.test',
 };
+// A pretend Google OAuth client; the tests stand in for Google's token endpoint (tests/worker/helpers.ts).
+const TEST_GOOGLE = { GOOGLE_CLIENT_ID: 'tally-test-client', GOOGLE_CLIENT_SECRET: 'tally-test-secret' };
 
 const alias = {
   '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
@@ -18,7 +20,7 @@ export default defineConfig(async () => {
   const common = (bindings: Record<string, unknown>) =>
     cloudflareTest({
       wrangler: { configPath: './wrangler.jsonc' },
-      miniflare: { bindings: { TEST_MIGRATIONS: migrations, ...TEST_VAPID, ...bindings } },
+      miniflare: { bindings: { TEST_MIGRATIONS: migrations, ...TEST_VAPID, ...TEST_GOOGLE, ...bindings } },
     });
   return {
     resolve: { alias },
@@ -30,15 +32,6 @@ export default defineConfig(async () => {
           test: {
             name: 'worker',
             include: ['tests/worker/**/*.test.ts'],
-            setupFiles: ['tests/worker/setup.ts'],
-          },
-        },
-        {
-          resolve: { alias },
-          plugins: [common({ INVITE_CODE: 'letmein', SIGNUPS_ENABLED: 'true' })],
-          test: {
-            name: 'worker-gated',
-            include: ['tests/worker-gated/**/*.test.ts'],
             setupFiles: ['tests/worker/setup.ts'],
           },
         },

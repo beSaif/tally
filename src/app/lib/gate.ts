@@ -1,5 +1,5 @@
 /** The auth gate (spec §3): which screen a path shows, and where to redirect. Pure for testing. */
-export type Screen = 'login' | 'signup' | 'setup' | 'home' | 'overview' | 'settings';
+export type Screen = 'login' | 'privacy' | 'setup' | 'home' | 'overview' | 'settings';
 
 export interface GateInput {
   path: string;
@@ -18,10 +18,10 @@ const APP_SCREENS: Record<string, Screen> = { '/': 'home', '/overview': 'overvie
 
 export function gate({ path, authed, hasKey, setupComplete }: GateInput): GateResult {
   const p = path.length > 1 ? path.replace(/\/+$/, '') : path;
-  if (!authed) {
-    if (p === '/signup') return { screen: 'signup' };
-    return p === '/login' ? { screen: 'login' } : { screen: 'login', redirect: '/login' };
-  }
+  // The privacy policy is public: Google's consent screen links to it.
+  if (p === '/privacy') return { screen: 'privacy' };
+  // One sign-in screen; the old /signup and anything else unknown lead there.
+  if (!authed) return p === '/login' ? { screen: 'login' } : { screen: 'login', redirect: '/login' };
   if (!hasKey || !setupComplete) {
     return p === '/setup' ? { screen: 'setup' } : { screen: 'setup', redirect: '/setup' };
   }

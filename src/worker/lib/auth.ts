@@ -1,6 +1,6 @@
 /**
- * Email + password auth: PBKDF2-SHA256 hashing, opaque session tokens stored hashed in D1,
- * HttpOnly cookie, and the `requireUser` middleware.
+ * Sessions: opaque tokens stored hashed in D1, an HttpOnly cookie, the `requireUser` middleware and
+ * the same-origin guard. Who the person is comes from Google (lib/google.ts, routes/auth.ts).
  */
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
@@ -9,7 +9,6 @@ import type { AppEnv, Env, SessionUser } from '../env';
 import { ApiError, unauthorized } from './http';
 import { nowMs } from './db';
 
-const PBKDF2_ITERATIONS = 100_000; // Workers cap PBKDF2 at 100k iterations
 const enc = new TextEncoder();
 
 const b64 = (buf: ArrayBuffer | Uint8Array): string => {
@@ -18,30 +17,10 @@ const b64 = (buf: ArrayBuffer | Uint8Array): string => {
   for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s);
 };
-const unb64 = (s: string): Uint8Array => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
 export const b64url = (buf: ArrayBuffer | Uint8Array): string => b64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: salt as BufferSource, iterations }, key, 256);
-  return new Uint8Array(bits);
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await pbkdf2(password, salt, PBKDF2_ITERATIONS);
-  return `pbkdf2$${PBKDF2_ITERATIONS}$${b64(salt)}$${b64(hash)}`;
-}
-
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [scheme, iterStr, saltB64, hashB64] = stored.split('$');
-  if (scheme !== 'pbkdf2' || !iterStr || !saltB64 || !hashB64) return false;
-  const iterations = Number(iterStr);
-  if (!Number.isInteger(iterations) || iterations < 1_000 || iterations > 1_000_000) return false;
-  const expected = unb64(hashB64);
-  const actual = await pbkdf2(password, unb64(saltB64), iterations);
-  return constantTimeEqual(actual, expected);
-}
+/** `bytes` random bytes as base64url: session tokens, OAuth state and nonce, the PKCE verifier. */
+export const randomToken = (bytes = 32): string => b64url(crypto.getRandomValues(new Uint8Array(bytes)));
 
 export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
@@ -67,7 +46,7 @@ export interface SessionInfo {
 }
 
 export async function createSession(env: Env, userId: string, userAgent: string | null): Promise<SessionInfo> {
-  const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const token = randomToken();
   const id = await sha256Hex(token);
   const now = nowMs();
   const expiresAt = now + SESSION_DAYS * DAY_MS;
@@ -80,16 +59,6 @@ export async function createSession(env: Env, userId: string, userAgent: string 
 export async function deleteSession(env: Env, token: string): Promise<void> {
   const id = await sha256Hex(token);
   await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(id).run();
-}
-
-/** Revokes every session of a user except (optionally) the current one. */
-export async function deleteOtherSessions(env: Env, userId: string, keepToken: string | null): Promise<void> {
-  if (keepToken) {
-    const keepId = await sha256Hex(keepToken);
-    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND id <> ?').bind(userId, keepId).run();
-  } else {
-    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
-  }
 }
 
 interface SessionJoinRow {
@@ -180,42 +149,3 @@ export const sameOriginGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
   await next();
 };
-
-// ---- login throttling ----
-// Counting failures per email alone would let anyone lock the owner out with ten wrong
-// passwords. The per-address limit stops one guesser; the per-email limit, far higher, still
-// bounds a guess spread over many addresses.
-const ATTEMPT_WINDOW_MS = 15 * 60_000;
-export const ATTEMPT_LIMIT_PER_ADDRESS = 10;
-export const ATTEMPT_LIMIT_PER_EMAIL = 100;
-
-/** The caller's address as Cloudflare reports it; '' when there is none (local tools, tests). */
-export function clientIp(c: Context<AppEnv>): string {
-  return c.req.header('CF-Connecting-IP') ?? '';
-}
-
-export async function assertNotThrottled(env: Env, email: string, ip: string): Promise<void> {
-  const since = nowMs() - ATTEMPT_WINDOW_MS;
-  const row = await env.DB.prepare(
-    'SELECT COUNT(*) AS for_email, COALESCE(SUM(ip = ?), 0) AS from_ip FROM login_attempts WHERE email = ? AND attempted_at > ?',
-  )
-    .bind(ip, email, since)
-    .first<{ for_email: number; from_ip: number }>();
-  if ((row?.from_ip ?? 0) >= ATTEMPT_LIMIT_PER_ADDRESS || (row?.for_email ?? 0) >= ATTEMPT_LIMIT_PER_EMAIL) {
-    throw new ApiError('rate_limited', 'Too many attempts. Try again later.');
-  }
-}
-
-export async function recordFailedAttempt(env: Env, email: string, ip: string): Promise<void> {
-  const now = nowMs();
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO login_attempts (email, ip, attempted_at) VALUES (?, ?, ?)').bind(email, ip, now),
-    // Keep the table small: anything older than the window is irrelevant.
-    env.DB.prepare('DELETE FROM login_attempts WHERE attempted_at < ?').bind(now - ATTEMPT_WINDOW_MS),
-  ]);
-}
-
-/** After a successful login from this address. Failures from other addresses still count. */
-export async function clearAttempts(env: Env, email: string, ip: string): Promise<void> {
-  await env.DB.prepare('DELETE FROM login_attempts WHERE email = ? AND ip = ?').bind(email, ip).run();
-}

@@ -8,7 +8,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { PushPayload } from '../src/shared/api';
 import { fakePushState } from './support/fake-push';
-import { designAccount, PASSWORD, prepare } from './support/fixtures';
+import { designAccount, prepare } from './support/fixtures';
 import { decryptDelivery, PushSink } from './support/push-sink';
 
 test.use({ channel: 'chromium' });
@@ -18,7 +18,10 @@ test.beforeAll(() => sink.start());
 test.afterAll(() => sink.stop());
 // Subscribed accounts would stay in every later cron run of the local database: remove them.
 test.afterEach(async ({ page }) => {
-  await page.request.delete('/api/auth/account', { data: { password: PASSWORD } }).catch(() => undefined);
+  const me = await page.request.get('/api/auth/me').catch(() => null);
+  if (!me?.ok()) return;
+  const { user } = (await me.json()) as { user: { email: string } };
+  await page.request.delete('/api/auth/account', { data: { email: user.email } }).catch(() => undefined);
 });
 
 interface Shown {
@@ -229,25 +232,29 @@ test('a weekly summary click opens the week overview', async ({ page, context, b
   await expect(page.getByRole('tab', { name: 'Week' })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('deleting the account: a wrong password leaves notifications on, the right one unsubscribes this browser', async ({ page, context, baseURL }) => {
+test('deleting the account: a failed deletion leaves notifications on, a successful one unsubscribes this browser', async ({ page, context, baseURL }) => {
   await allowNotifications(context, new URL(baseURL ?? '').origin);
   await prepare(page, { withKey: true, pushEndpoint: sink.endpointBase });
   const account = await designAccount(page);
   const sub = await enableOnThisDevice(page);
   const listed = async () => ((await (await page.request.get('/api/push/subscriptions')).json()) as { subscriptions: Array<{ endpoint: string }> }).subscriptions;
 
+  // The server refuses once (a dropped connection would look the same): nothing changes on this device.
+  await page.route(
+    '**/api/auth/account',
+    (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'internal', message: 'not now' } }) }),
+    { times: 1 },
+  );
   await page.getByRole('button', { name: 'Delete account' }).click();
-  await page.getByLabel('Email', { exact: true }).last().fill(account.email);
-  await page.getByLabel('Password', { exact: true }).fill('not the password');
+  await page.getByLabel('Email', { exact: true }).fill(account.email);
   await page.getByRole('button', { name: 'Delete forever' }).click();
-  await expect(page.getByText('That password is not right.')).toBeVisible();
+  await expect(page.getByText('Could not save. Try again.')).toBeVisible();
   expect((await fakePushState(page)).sub?.endpoint).toBe(sub.endpoint);
   expect((await listed()).map((s) => s.endpoint)).toEqual([sub.endpoint]);
   await expect(page.getByRole('switch', { name: 'Notifications on this device' })).toHaveAttribute('aria-checked', 'true');
 
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Delete forever' }).click();
-  await expect(page).toHaveURL(/\/signup$/);
+  await expect(page).toHaveURL(/\/login$/);
   expect((await fakePushState(page)).sub).toBeUndefined();
   expect(await page.evaluate(() => localStorage.getItem('tally.push'))).toBeNull();
 });

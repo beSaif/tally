@@ -2,17 +2,7 @@
  * API contract shared by the Worker and the app. Keep in sync with docs/SPEC.md §6.
  */
 
-export type ErrorCode =
-  | 'unauthorized'
-  | 'invalid_credentials'
-  | 'email_taken'
-  | 'invite_required'
-  | 'signups_disabled'
-  | 'validation'
-  | 'not_found'
-  | 'rate_limited'
-  | 'forbidden'
-  | 'internal';
+export type ErrorCode = 'unauthorized' | 'validation' | 'not_found' | 'rate_limited' | 'forbidden' | 'internal';
 
 export interface ApiErrorBody {
   error: { code: ErrorCode; message: string };
@@ -115,22 +105,11 @@ export interface Summary {
 }
 
 // ---- auth ----
-export interface SignupInput {
-  email: string;
-  password: string;
-  language: ResolvedLanguage;
-  invite_code?: string;
-}
-export interface LoginInput {
-  email: string;
-  password: string;
-}
-export interface PasswordChangeInput {
-  current: string;
-  new: string;
-}
+/** Why a Google sign-in came back to `/login` without a session (the `error` query parameter). */
+export type SignInError = 'cancelled' | 'failed' | 'signups_disabled';
 export interface DeleteAccountInput {
-  password: string;
+  /** The account's email, typed again as confirmation. */
+  email: string;
 }
 export interface Bootstrap {
   user: User;

@@ -826,3 +826,35 @@ body.has-sheet .toast {
     transition: none;
   }
 }
+
+/* ---------- sign in ---------- */
+.auth-bottom {
+  display: flex;
+  flex-direction: column;
+}
+.auth-bottom .btn {
+  text-decoration: none;
+}
+
+/* ---------- privacy ---------- */
+.privacy .lead {
+  margin-top: 18px;
+}
+.privacy .lbl {
+  display: block;
+  margin-top: 24px;
+}
+.privacy .text {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+  margin-top: 8px;
+}
+.privacy .link {
+  align-self: flex-start;
+  margin-top: 28px;
+}
+.about-link {
+  display: block;
+  margin-top: 10px;
+}

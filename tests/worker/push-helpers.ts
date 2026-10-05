@@ -140,7 +140,7 @@ export async function seedUser(settings: SettingsSeed = {}): Promise<string> {
   const id = crypto.randomUUID();
   const now = Date.now();
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)').bind(id, `${id}@example.com`, 'unused', now),
+    env.DB.prepare('INSERT INTO users (id, google_sub, email, created_at) VALUES (?, ?, ?, ?)').bind(id, `sub-${id}`, `${id}@example.com`, now),
     env.DB.prepare('INSERT INTO settings (user_id, created_at, updated_at) VALUES (?, ?, ?)').bind(id, now, now),
   ]);
   await setSettings(id, settings);

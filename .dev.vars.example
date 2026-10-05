@@ -3,7 +3,10 @@
 VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:you@example.com
-# Optional: require an invite code to sign up.
-# INVITE_CODE=
+# Sign in with Google: an OAuth client of type "Web application" from the Google Cloud console, with
+# http://localhost:5173/api/auth/google/callback and http://localhost:8787/api/auth/google/callback
+# among its authorized redirect URIs (README, "Deploying to Cloudflare").
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 # Optional: close sign-ups entirely ("false").
 # SIGNUPS_ENABLED=true

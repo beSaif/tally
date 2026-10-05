@@ -5,14 +5,14 @@ import { toLocalDay } from '@shared/dates';
 import { formatAmount, parseAmount } from '@shared/money';
 import { version } from '../../../package.json';
 import { lang, t, type TKey } from '../i18n';
-import { api, isApiError } from '../lib/api';
+import { api } from '../lib/api';
 import { dayShortMonth } from '../lib/format';
 import { installed, installPrompt, promptInstall } from '../lib/install';
 import { currentSubscription, disablePush, enablePush, isIOS, permission, PushError, pushSupport, unsubscribeLocally } from '../lib/push';
 import { categories, forgetGeminiKey, geminiKey, model, replaceCategories, saveGeminiKey, settings, signedOut, updateSettings, user } from '../lib/store';
 import { showToast } from '../lib/toast';
 import { describeUserAgent } from '../lib/ua';
-import { back, navigate } from '../router';
+import { back, linkTo, navigate } from '../router';
 import AddChip from '../components/AddChip';
 import { Section, Toggle } from '../components/Controls';
 import DefaultsFields from '../components/DefaultsFields';
@@ -48,6 +48,9 @@ export default function Settings() {
         <p class="about">{t('settings.version', { version })}</p>
         <a class="link" href={REPO} target="_blank" rel="noopener noreferrer">
           {t('settings.source')}
+        </a>
+        <a class="link about-link" href="/privacy" onClick={linkTo('/privacy')}>
+          {t('settings.privacy')}
         </a>
       </Section>
     </main>
@@ -438,36 +441,16 @@ function NotificationsSection() {
 
 function AccountSection() {
   const u = user.value;
-  const [mode, setMode] = useState<'idle' | 'password' | 'delete'>('idle');
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
+  const [confirming, setConfirming] = useState(false);
   const [confirmEmail, setConfirmEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<TKey | null>(null);
   if (!u) return null;
 
-  const reset = (m: typeof mode) => {
-    setMode(m);
-    setCurrent('');
-    setNext('');
+  const toggleConfirm = () => {
+    setConfirming(!confirming);
     setConfirmEmail('');
     setError(null);
-  };
-
-  const changePassword = async (e: Event) => {
-    e.preventDefault();
-    if (next.length < 8) return setError('auth.err.validation');
-    setBusy(true);
-    setError(null);
-    try {
-      await api.changePassword({ current, new: next });
-      reset('idle');
-      showToast({ text: t('settings.passwordChanged') });
-    } catch (err) {
-      setError(isApiError(err) && err.code === 'invalid_credentials' ? 'settings.wrongPassword' : 'settings.saveFailed');
-    } finally {
-      setBusy(false);
-    }
   };
 
   const logout = async () => {
@@ -484,17 +467,17 @@ function AccountSection() {
     setBusy(true);
     setError(null);
     try {
-      await api.deleteAccount({ password: current });
-    } catch (err) {
+      await api.deleteAccount({ email: confirmEmail.trim() });
+    } catch {
       // Nothing changed, notifications on this device included.
       setBusy(false);
-      setError(isApiError(err) && err.code === 'invalid_credentials' ? 'settings.wrongPassword' : 'settings.saveFailed');
+      setError('settings.saveFailed');
       return;
     }
     await atMost(unsubscribeLocally(), 2500);
     forgetGeminiKey();
     signedOut();
-    navigate('/signup', { replace: true });
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -502,52 +485,18 @@ function AccountSection() {
       <div class="kv">
         <div>{t('settings.email')}</div>
         <div class="email">{u.email}</div>
-        <div>{t('settings.password')}</div>
-        <div class="row">
-          <span class="mono">••••••••</span>
-          <button type="button" class="pill" aria-expanded={mode === 'password'} onClick={() => reset(mode === 'password' ? 'idle' : 'password')}>
-            {t('common.change')}
-          </button>
-        </div>
+        <div>{t('settings.signIn')}</div>
+        <div>{t('settings.signInGoogle')}</div>
       </div>
-      {mode === 'password' ? (
-        <form class="inline-form" onSubmit={changePassword}>
-          <label class="lbl" for="set-pw-current">
-            {t('settings.currentPassword')}
-          </label>
-          <div class="field">
-            <div class="v">
-              <input id="set-pw-current" type="password" autocomplete="current-password" value={current} onInput={(e) => setCurrent(e.currentTarget.value)} />
-            </div>
-          </div>
-          <label class="lbl" for="set-pw-new">
-            {t('settings.newPassword')}
-          </label>
-          <div class="field">
-            <div class="v">
-              <input id="set-pw-new" type="password" autocomplete="new-password" minLength={8} value={next} onInput={(e) => setNext(e.currentTarget.value)} />
-            </div>
-          </div>
-          {error ? <p class="err line">{t(error)}</p> : null}
-          <div class="btns">
-            <button type="button" class="btn" onClick={() => reset('idle')}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" class="btn primary" disabled={busy || !current || !next}>
-              {busy ? '…' : t('common.save')}
-            </button>
-          </div>
-        </form>
-      ) : null}
       <div class="account-btns">
         <button type="button" class="btn" disabled={busy} onClick={() => void logout()}>
           {t('settings.logout')}
         </button>
-        <button type="button" class="btn danger" aria-expanded={mode === 'delete'} onClick={() => reset(mode === 'delete' ? 'idle' : 'delete')}>
+        <button type="button" class="btn danger" aria-expanded={confirming} onClick={toggleConfirm}>
           {t('settings.deleteAccount')}
         </button>
       </div>
-      {mode === 'delete' ? (
+      {confirming ? (
         <form class="inline-form" onSubmit={deleteAccount}>
           <p class="warn">{t('settings.deleteWarning')}</p>
           <label class="lbl" for="set-del-email">
@@ -558,20 +507,12 @@ function AccountSection() {
               <input id="set-del-email" type="email" autocomplete="off" autocapitalize="off" value={confirmEmail} onInput={(e) => setConfirmEmail(e.currentTarget.value)} />
             </div>
           </div>
-          <label class="lbl" for="set-del-pw">
-            {t('settings.password')}
-          </label>
-          <div class="field">
-            <div class="v">
-              <input id="set-del-pw" type="password" autocomplete="current-password" value={current} onInput={(e) => setCurrent(e.currentTarget.value)} />
-            </div>
-          </div>
           {error ? <p class="err line">{t(error)}</p> : null}
           <div class="btns">
-            <button type="button" class="btn" onClick={() => reset('idle')}>
+            <button type="button" class="btn" onClick={toggleConfirm}>
               {t('common.cancel')}
             </button>
-            <button type="submit" class="btn danger-fill" disabled={busy || confirmEmail.trim().toLowerCase() !== u.email.toLowerCase() || !current}>
+            <button type="submit" class="btn danger-fill" disabled={busy || confirmEmail.trim().toLowerCase() !== u.email.toLowerCase()}>
               {busy ? '…' : t('settings.deleteForever')}
             </button>
           </div>

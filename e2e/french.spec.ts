@@ -4,7 +4,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { DEFAULT_MODEL } from '../src/shared/constants';
-import { designAccount, PASSWORD, prepare, shot, TEST_KEY, uniqueEmail } from './support/fixtures';
+import { designAccount, prepare, shot, TEST_KEY, uniqueEmail, uniqueSub } from './support/fixtures';
 
 const NNBSP = ' ';
 
@@ -81,17 +81,13 @@ test('switching to French in Settings translates every screen', async ({ page })
 test.describe('a French device', () => {
   test.use({ locale: 'fr-CH' });
 
-  test('signs up and sets up in French, with French default categories', async ({ page }) => {
-    await prepare(page);
-    await page.goto('/signup');
-    await expect(page.getByRole('heading', { name: /Créez votre/ })).toBeVisible();
-    await shot(page, 'fr-signup');
-    await page.getByLabel('E-mail').fill(uniqueEmail('fr'));
-    await page.getByLabel('Mot de passe').fill('court');
-    await page.getByRole('button', { name: 'Créer le compte' }).click();
-    await expect(page.getByRole('alert')).toHaveText('Vérifiez l’e-mail et utilisez au moins 8 caractères pour le mot de passe.');
-    await page.getByLabel('Mot de passe').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Créer le compte' }).click();
+  test('signs in and sets up in French, with French default categories', async ({ page }) => {
+    const { google } = await prepare(page);
+    await page.goto('/login');
+    await expect(page.getByRole('heading', { name: /Bienvenue/ })).toBeVisible();
+    await shot(page, 'fr-login');
+    google.nextUser = { sub: uniqueSub(), email: uniqueEmail('fr') };
+    await page.getByRole('link', { name: 'Continuer avec Google' }).click();
 
     await expect(page.getByRole('heading', { name: /Apportez/ })).toBeVisible();
     await expect(page.getByText('Étape 01 / 02')).toBeVisible();

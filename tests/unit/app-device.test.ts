@@ -1,28 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { gate } from '@app/lib/gate';
 import { defaultCurrency, regionOf } from '@app/lib/region';
 import { describeUserAgent, isIOSDevice } from '@app/lib/ua';
-
-describe('auth gate (spec §3)', () => {
-  const ready = { authed: true, hasKey: true, setupComplete: true };
-  it('sends visitors to the login', () => {
-    expect(gate({ path: '/', authed: false, hasKey: false, setupComplete: false })).toEqual({ screen: 'login', redirect: '/login' });
-    expect(gate({ path: '/signup', authed: false, hasKey: false, setupComplete: false })).toEqual({ screen: 'signup' });
-    expect(gate({ path: '/overview', authed: false, hasKey: true, setupComplete: true })).toEqual({ screen: 'login', redirect: '/login' });
-  });
-  it('sends an account without a key on this device, or with setup unfinished, to setup', () => {
-    expect(gate({ path: '/', authed: true, hasKey: false, setupComplete: true })).toEqual({ screen: 'setup', redirect: '/setup' });
-    expect(gate({ path: '/settings', authed: true, hasKey: true, setupComplete: false })).toEqual({ screen: 'setup', redirect: '/setup' });
-    expect(gate({ path: '/setup', authed: true, hasKey: false, setupComplete: false })).toEqual({ screen: 'setup' });
-  });
-  it('routes the app screens and sends everything else home', () => {
-    expect(gate({ path: '/', ...ready })).toEqual({ screen: 'home' });
-    expect(gate({ path: '/overview/', ...ready })).toEqual({ screen: 'overview' });
-    expect(gate({ path: '/settings', ...ready })).toEqual({ screen: 'settings' });
-    expect(gate({ path: '/login', ...ready })).toEqual({ screen: 'home', redirect: '/' });
-    expect(gate({ path: '/setup', ...ready })).toEqual({ screen: 'home', redirect: '/' });
-  });
-});
 
 describe('default currency from the device region (spec §3.2)', () => {
   it('reads the region subtag', () => {

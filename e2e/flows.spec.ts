@@ -1,7 +1,8 @@
 /**
  * The end-to-end flow of docs/SPEC.md §10 against the real Worker API, with Gemini mocked and a
- * stand-in push service: sign up → setup → text log → batch → edit → delete + undo → overview →
- * CSV export → ask → notifications (on + test) → log out → log in → the data is still there.
+ * stand-in push service and a stand-in Google: sign in → setup → text log → batch → edit → delete +
+ * undo → overview → CSV export → ask → notifications (on + test) → log out → sign in again → the
+ * data is still there.
  */
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page, type Request } from '@playwright/test';
@@ -9,7 +10,7 @@ import { DEFAULT_MODEL } from '../src/shared/constants';
 import type { Settings } from '../src/shared/api';
 import { decryptDelivery, PushSink } from './support/push-sink';
 import { fakePushState } from './support/fake-push';
-import { listEntries, PASSWORD, prepare, shot, TEST_KEY, uniqueEmail } from './support/fixtures';
+import { listEntries, prepare, shot, TEST_KEY, uniqueEmail, uniqueSub } from './support/fixtures';
 import { BATCH_TEXT } from './support/mock-gemini';
 
 const sink = new PushSink();
@@ -24,9 +25,9 @@ async function logText(page: Page, text: string): Promise<void> {
   await composer(page).press('Enter');
 }
 
-test('sign up, log, edit, delete, overview, export, ask, notifications, log out and back in', async ({ page }) => {
+test('sign in, log, edit, delete, overview, export, ask, notifications, log out and back in', async ({ page }) => {
   test.setTimeout(150_000);
-  const { gemini } = await prepare(page, { pushEndpoint: sink.endpointBase });
+  const { gemini, google } = await prepare(page, { pushEndpoint: sink.endpointBase });
   // The Gemini key must never travel to our API.
   const apiRequests: Request[] = [];
   page.on('request', (r) => {
@@ -34,15 +35,12 @@ test('sign up, log, edit, delete, overview, export, ask, notifications, log out 
   });
   const email = uniqueEmail('flow');
 
-  // ---- sign up
+  // ---- sign in with Google (the stand-in signs `email` in without an account chooser)
   await page.goto('/');
   await expect(page).toHaveURL(/\/login$/);
-  await page.getByRole('link', { name: 'New here? Create an account' }).click();
-  await expect(page).toHaveURL(/\/signup$/);
-  await expect(page.getByRole('heading', { name: /Create your/ })).toBeVisible();
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  google.nextUser = { sub: uniqueSub(), email };
+  await page.getByRole('link', { name: 'Continue with Google' }).click();
 
   // ---- setup, step 1: the key is checked live (rejected, then pasted and accepted)
   await expect(page).toHaveURL(/\/setup$/);
@@ -214,13 +212,13 @@ test('sign up, log, edit, delete, overview, export, ask, notifications, log out 
   expect(decryptDelivery(delivered[0]!.body, sub)).toMatchObject({ kind: 'test', title: 'Notifications are on', url: '/settings', lang: 'en' });
   await shot(page, 'flow-settings-notifications-on', { fullPage: true });
 
-  // ---- log out, log back in: everything is still there
+  // ---- log out, sign back in with the same Google account: everything is still there
   await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Log in' }).click();
+  expect((await page.request.get('/api/auth/me')).status()).toBe(401);
+  await page.getByRole('link', { name: 'Continue with Google' }).click();
   await expect(page).toHaveURL(/\/$/);
+  expect(((await (await page.request.get('/api/auth/me')).json()) as { user: { email: string } }).user.email).toBe(email);
   await expect(page.locator('.hero-num')).toHaveText('52.30');
   await expect(row(page, 'Coop')).toContainText('25.00');
   await expect(row(page, 'Train → Lausanne')).toBeVisible();

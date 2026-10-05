@@ -31,7 +31,7 @@ icon. The build spec lives in [`docs/SPEC.md`](docs/SPEC.md).
 - **Push notifications**: daily reminder at your time (optionally only if nothing was logged),
   alerts at 50 / 80 / 100 % of the budget, Monday summary, first-of-month report, test button,
   per-device management, notification actions ("Log now", "Skip today").
-- **Multi-user**: email + password accounts; optional invite code; sign-ups can be closed.
+- **Multi-user**: sign in with Google; sign-ups can be closed.
 - **PWA that feels like an app**: installable, offline shell, no pinch or double-tap zoom, no rubber-banding or pull-to-refresh, no text selection or long-press callouts on controls, composer stays above the keyboard, self-hosted fonts, no third-party scripts or analytics.
 
 ## How it works
@@ -70,8 +70,11 @@ Or run the built app the way production serves it:
 npm run preview             # build, migrate, then wrangler dev on http://127.0.0.1:8787
 ```
 
-Create an account, paste a Gemini key from https://aistudio.google.com/app/apikey (the free tier is
-enough), pick your defaults, and start logging.
+Signing in needs a Google OAuth client (step 3 of "Deploying" below, once): put its id and secret in
+`.dev.vars` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, with
+`http://localhost:5173/api/auth/google/callback` and `http://localhost:8787/api/auth/google/callback`
+among the client's redirect URIs. Then sign in with Google, paste a Gemini key from
+https://aistudio.google.com/app/apikey (the free tier is enough), pick your defaults, and start logging.
 
 Useful scripts:
 
@@ -79,7 +82,7 @@ Useful scripts:
 | --- | --- |
 | `npm run check` | Typecheck the app and the Worker |
 | `npm test` | Unit tests (node) + Worker tests (inside workerd with D1) |
-| `npm run e2e` | Playwright end-to-end tests: builds, migrates the local D1, starts `wrangler dev` on :8787 (creating `.dev.vars` if needed) and drives the real app with only Gemini and the browser push API mocked. Stop any `wrangler dev` already on :8787 first, or Playwright reuses it. |
+| `npm run e2e` | Playwright end-to-end tests: builds, migrates the local D1, starts `wrangler dev` on :8787 (creating `.dev.vars` if needed) and drives the real app with only Gemini, Google's sign-in (a stand-in on :8790) and the browser push API mocked. Stop any `wrangler dev` already on :8787 first, or Playwright reuses it without the sign-in stand-in. |
 | `npm run icons` | Re-render the pixel icon to `public/icons/` |
 | `npm run types` | Regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` |
 
@@ -89,15 +92,22 @@ Everything fits in Cloudflare's free tier (Workers, D1, cron triggers).
 
 1. `npx wrangler login`
 2. `npm run setup:cloudflare` — creates the D1 database `tally` and writes its id into `wrangler.jsonc` (commit that change).
-3. Secrets (once):
+3. Sign in with Google (once): in the [Google Cloud console](https://console.cloud.google.com), create a
+   project and configure its OAuth consent screen (external; scopes `openid` and `email`; home page
+   `https://tally.<your-subdomain>.workers.dev` and privacy policy `https://tally.<your-subdomain>.workers.dev/privacy`,
+   which Google requires to publish). Then create an OAuth client of type **Web application** with
+   `https://tally.<your-subdomain>.workers.dev/api/auth/google/callback` among its authorized redirect
+   URIs (add the two `localhost` ones from "Local development" too).
+4. Secrets (once):
    ```sh
    node scripts/vapid.mjs --print          # generate a production VAPID pair
    npx wrangler secret put VAPID_PUBLIC_KEY
    npx wrangler secret put VAPID_PRIVATE_KEY
    npx wrangler secret put VAPID_SUBJECT   # e.g. mailto:you@example.com
-   npx wrangler secret put INVITE_CODE     # optional: require a code to sign up
+   npx wrangler secret put GOOGLE_CLIENT_ID
+   npx wrangler secret put GOOGLE_CLIENT_SECRET
    ```
-4. `npm run deploy` — builds, applies migrations remotely, deploys to `tally.<your-subdomain>.workers.dev`.
+5. `npm run deploy` — builds, applies migrations remotely, deploys to `tally.<your-subdomain>.workers.dev`.
 
 **GitHub Actions**: `.github/workflows/deploy.yml` deploys on every push to `main` once the
 repository secrets `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers", plus D1 edit) and
@@ -107,8 +117,9 @@ Configuration (`wrangler.jsonc` vars / secrets):
 
 | Name | Kind | Meaning |
 | --- | --- | --- |
-| `SIGNUPS_ENABLED` | var | `"false"` closes sign-ups (default `"true"`) |
-| `INVITE_CODE` | secret | when set, sign-up requires this code |
+| `SIGNUPS_ENABLED` | var | `"false"` closes sign-ups: only Google accounts that already have a Tally account get in (default `"true"`) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | secrets | the Google OAuth client (type "Web application") |
+| `GOOGLE_AUTH_URL`, `GOOGLE_TOKEN_URL` | vars | override Google's endpoints; only the end-to-end tests do, to point at a stand-in |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | secrets | Web Push identity (`npm run vapid` locally) |
 
 ## Push notifications
@@ -122,14 +133,16 @@ are account-wide; subscriptions are per device and can be removed from the devic
 ## Privacy and security
 
 - Your Gemini key is stored only in your browser (`localStorage`) and sent only to Google.
-- Passwords are hashed with PBKDF2-SHA256 (100 000 iterations); sessions are opaque tokens stored
-  hashed, in an `HttpOnly` `SameSite=Lax` cookie. Cross-origin mutations are refused. Login is
-  throttled per email and address.
+- Sign-in is delegated to Google (OpenID Connect, authorization-code flow with PKCE and a state
+  cookie, run by the Worker: no Google script on the page). Tally stores your Google account id and
+  email, nothing else. Sessions are opaque tokens stored hashed, in an `HttpOnly` `SameSite=Lax`
+  cookie. Cross-origin mutations are refused.
+- The privacy policy is at `/privacy` (also linked from the Google consent screen).
 - Push payloads are end-to-end encrypted (RFC 8291). The Worker only stores the subscription.
 - Export your data any time as CSV. Deleting the account removes everything.
 
-Known limitations of this version: no email verification and no password reset (there is no email
-provider), no offline queueing of entries (the shell works offline, logging needs a connection).
+Known limitation of this version: no offline queueing of entries (the shell works offline, logging
+needs a connection).
 
 ## Project layout
 
@@ -140,7 +153,7 @@ migrations/      D1 SQL migrations
 public/          manifest, icons, fonts
 scripts/         icons.mjs · vapid.mjs · setup-cloudflare.mjs
 src/shared/      API contract types, money/date helpers, zod schemas
-src/worker/      Cloudflare Worker: auth, routes, push (Web Push, cron)
+src/worker/      Cloudflare Worker: Google sign-in, sessions, routes, push (Web Push, cron)
 src/app/         Preact PWA: screens, components, i18n, Gemini client, service worker
 tests/           unit (node) and Worker (workerd) tests
 e2e/             Playwright end-to-end tests

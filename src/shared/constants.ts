@@ -4,6 +4,9 @@ export const DEFAULT_CURRENCY = 'CHF';
 export const SESSION_COOKIE = 'tally_session';
 export const SESSION_DAYS = 30;
 export const SESSION_RENEW_BELOW_DAYS = 15;
+/** Keeps state, nonce and PKCE verifier between leaving for Google and coming back. */
+export const OAUTH_COOKIE = 'tally_oauth';
+export const OAUTH_COOKIE_SECONDS = 10 * 60;
 export const GEMINI_KEY_STORAGE = 'tally.gemini.key';
 
 export const DEFAULT_CATEGORIES: Record<'en' | 'fr', readonly string[]> = {

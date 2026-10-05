@@ -13,7 +13,7 @@ import { showToast } from './lib/toast';
 import { navigate } from './router';
 
 setApiHandlers({
-  // The session expired or was revoked (password changed elsewhere): back to the login screen.
+  // The session expired or was revoked (account deleted, signed out elsewhere): back to the login screen.
   unauthorized: () => {
     signedOut();
     navigate('/login', { replace: true });

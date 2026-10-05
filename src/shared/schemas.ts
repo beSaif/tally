@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { isValidDay, isValidMinute } from './dates';
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
-export const passwordSchema = z.string().min(8).max(200);
 export const resolvedLanguageSchema = z.enum(['en', 'fr']);
 export const languageSchema = z.enum(['auto', 'en', 'fr']);
 export const currencySchema = z.string().regex(/^[A-Z]{3}$/);
@@ -11,15 +10,7 @@ export const minuteSchema = z.string().refine(isValidMinute, 'expected YYYY-MM-D
 export const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const entrySourceSchema = z.enum(['text', 'voice', 'photo', 'manual']);
 
-export const signupSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
-  language: resolvedLanguageSchema,
-  invite_code: z.string().max(200).optional(),
-});
-export const loginSchema = z.object({ email: emailSchema, password: z.string().min(1).max(200) });
-export const passwordChangeSchema = z.object({ current: z.string().min(1).max(200), new: passwordSchema });
-export const deleteAccountSchema = z.object({ password: z.string().min(1).max(200) });
+export const deleteAccountSchema = z.object({ email: emailSchema });
 
 export const notificationPrefsSchema = z.object({
   reminder: z.boolean(),

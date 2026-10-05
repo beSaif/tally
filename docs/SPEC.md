@@ -14,7 +14,7 @@ background; thin rules; mono numbers; orange only for something *live*
 | Layout | **A — Ledger** (home list + composer, voice → confirm sheet, overview with category bars) |
 | Icon | **I2 — Receipt** (white receipt, torn edge, on black; orange bar is the total) |
 | Name | **Tally** |
-| Users | **Multi-user.** Anyone can sign up (optionally gated by an invite code). Email + password auth built into the Worker. |
+| Users | **Multi-user.** Sign in with Google (OpenID Connect code flow + PKCE, run by the Worker); the first sign-in creates the account. Sign-ups can be closed. |
 | Extras | **Batch parsing** (C.2: one sentence → several entries), **Ask your data** (C.3: natural-language question over your entries), **French UI** (EN + FR, "Auto" follows the device) |
 | Push | **Push notifications, first-class**: daily reminder, budget alerts, weekly summary, monthly report, test notification, actions, per-device management |
 | Hosting | Cloudflare Workers (static assets + API) + D1, on a `workers.dev` subdomain |
@@ -34,7 +34,8 @@ tally/
     index.ts              app + router mounting + `scheduled` export  (owned by scaffold; agents add route mounts only if told)
     env.ts                Env type (bindings, vars, secrets)
     lib/http.ts           ApiError, error → JSON mapping, helpers
-    lib/auth.ts           password hashing, sessions, cookie, `requireUser` middleware
+    lib/auth.ts           sessions, cookie, `requireUser` middleware, same-origin guard
+    lib/google.ts         sign in with Google: authorize URL, code exchange, ID-token claims
     lib/db.ts             tiny helpers (uuid, nowMs, row mappers)
     routes/*.ts           one Hono sub-app per resource (auth, settings, categories, entries, summary, export, push)
     push/webpush.ts       RFC 8291 / RFC 8292 Web Push (WebCrypto only)
@@ -52,7 +53,7 @@ tally/
     lib/image.ts          receipt photo downscale → JPEG
     lib/push.ts           permission + PushManager subscribe/unsubscribe + server sync
     lib/store.ts          app state (@preact/signals)
-    screens/              Login, Signup, Setup, Home, Overview, Settings
+    screens/              Auth (sign in), Privacy, Setup, Home, Overview, Settings
     components/           Topline, Wordmark, Hero, EntryList, Composer, CaptureSheet, ConfirmSheet, EntrySheet, CategoryBars, AskBox, Icons, ...
   tests/unit/             Vitest (node env): shared helpers, gemini request/response, audio encoder, i18n parity
   tests/worker/           Vitest with @cloudflare/vitest-pool-workers: API + auth + push + scheduled
@@ -175,20 +176,19 @@ Rendered with hard edges (`shape-rendering:crispEdges`, nearest-neighbour). File
 
 ## 3. Screens and flows
 
-Routes (History API, SPA fallback served by the Worker): `/login`, `/signup`, `/setup`, `/` (home), `/overview`, `/settings`.
-Auth gate: unauthenticated → `/login`. Authenticated but (no Gemini key on this device) or (`settings.setup_complete` false) → `/setup`.
+Routes (History API, SPA fallback served by the Worker): `/login`, `/privacy` (public), `/setup`, `/` (home), `/overview`, `/settings`.
+Auth gate: unauthenticated → `/login` (the old `/signup` too). Authenticated but (no Gemini key on this device) or (`settings.setup_complete` false) → `/setup`.
 Everything renders inside `.screen`; on desktop the column is centred (max 520px) with the composer/sheets aligned to it.
 All copy is localised (§4). Strings below are English; FR equivalents live in `i18n/fr.ts`.
 
-### 3.1 Sign up / Log in (new, same visual language as Setup)
+### 3.1 Sign in (same visual language as Setup)
 
 - Topline-free. `.step`-free. Wordmark (receipt icon + "Tally") top-left with 8px top padding.
-- `h1` 34px/700/-.035em/line-height 1: **"Create your account."** / **"Welcome back."**
-- Paragraph 14.5px `--ink2` max 30ch: "Tally turns a sentence, a voice note or a receipt into expenses. Your Gemini key stays on your device."
-- Fields: `.lbl` "Email" + `.field` (input type email, autocomplete), `.lbl` "Password" + `.field` (type password, autocomplete new-password / current-password, min 8 chars on signup, a show/hide text toggle as a `.pill`). Signup also shows `.lbl` "Invite code" + `.field` **only** when the server reports `invite_required` (after a 403) — the field appears with the error.
-- Error line: 12px `--err` under the fields (`invalid_credentials` → "That email or password is not right."; `email_taken` → "There is already an account for this email."; `invite_required` → "This Tally needs an invite code."; `signups_disabled` → "Sign-ups are closed on this Tally."; `rate_limited` → "Too many attempts. Try again in a few minutes.").
-- Bottom (`margin-top:auto`): `.btn.primary` "Create account" / "Log in"; under it a 14px underlined link "Already have an account? Log in" / "New here? Create an account". Button shows a busy state (text → "…", disabled) while the request runs.
-- After signup → `/setup` step 1. After login → `/setup` (step 1 only if this device has no key; step 2 only if `setup_complete` is false) else `/`.
+- `h1` 34px/700/-.035em/line-height 1: **"Welcome to Tally."** (two lines). Paragraph 14.5px `--ink2` max 30ch: "Tally turns a sentence, a voice note or a receipt into expenses. Your Gemini key stays on your device."
+- No form. Bottom (`margin-top:auto`): note 12px mute "Sign in with your Google account. Tally only learns your email address." · `.btn.primary` **"Continue with Google"**, a plain link to `GET /api/auth/google/start?lang=<en|fr>` (a full navigation: the Worker sends the browser to Google and back; no Google script is loaded). While the page leaves, the button reads "…". Under it a 14px underlined link "Privacy policy" → `/privacy`.
+- Error line 12px `--err` above the bottom block, from the `error` query the Worker lands with: `cancelled` → "Sign-in was cancelled. Try again whenever you like."; `failed` → "Google could not sign you in. Try again."; `signups_disabled` → "Sign-ups are closed on this Tally."; offline (the click is held back) → "You're offline."
+- After the callback the browser lands on `/` and the gate takes over: `/setup` (step 1 only if this device has no key; step 2 only if `setup_complete` is false) else `/`. The account is created on the first sign-in, with the default categories of the language the link carried.
+- **Privacy** (`/privacy`, public): `.topline` "← BACK" / "PRIVACY", lead "What Tally keeps, and where.", six short sections (`.lbl` + paragraph: account, entries, Gemini, cookies, push notifications, your data is yours) and the repository link. Linked from the sign-in screen, Settings → About and the Google consent screen.
 
 ### 3.2 Setup (design 00.1, 00.2)
 
@@ -255,9 +255,9 @@ Same `.sheet` as the confirm sheet, pre-filled in edit mode (Amount, What, Categ
 2. **Defaults** — Currency, Language, Budget (same controls as setup; save on change via `PUT /api/settings`).
 3. **Categories** — `.chips` of `.pill.on`; tap → inline "Remove Dining? Entries keep their history as Other." confirm; "+ Add". Replacing via `PUT /api/categories`.
 4. **Notifications** (§8) — a master row "Notifications on this device" with a toggle (`.pill` ON/OFF style switch) → permission + subscribe. When the browser does not support push, show the reason ("This browser cannot receive notifications." / iOS not installed: "On iPhone, add Tally to your Home Screen first, then enable notifications." with a short how-to). When on: rows **Daily reminder** (toggle) + **Reminder time** (`<input type=time>`) + **Only if nothing was logged** (toggle) · **Budget alerts** (toggle; "At 50%, 80% and 100% of your budget") · **Weekly summary** (toggle; "Monday morning") · **Monthly report** (toggle; "First day of the month") · **Send a test notification** (`.btn`) · **Devices**: list of subscriptions (user agent summary, "this device" pill, trash to remove).
-5. **Account** — Email · **Change password** (inline current/new) · **Log out** (`.btn`) · **Delete account** (`.btn` with `--err` text; confirm by typing the email) .
+5. **Account** — Email · Sign-in "With Google" · **Log out** (`.btn`) · **Delete account** (`.btn` with `--err` text; confirm by typing the email, which the server checks as well).
 6. **Install** — shown when not running standalone: Android/desktop: `.btn` "Install Tally" (uses the captured `beforeinstallprompt`); iOS: the Share → "Add to Home Screen" how-to.
-7. **About** — "Tally v{version}", link to the GitHub repo, "Design round 01" link to `/design/` is **not** shipped (design folder is not part of the build).
+7. **About** — "Tally v{version}", link to the GitHub repo, link "Privacy policy →" to `/privacy`; "Design round 01" link to `/design/` is **not** shipped (design folder is not part of the build).
 
 ### 3.9 Global behaviours
 
@@ -277,14 +277,14 @@ Same `.sheet` as the confirm sheet, pre-filled in edit mode (Amount, What, Categ
 - Gemini prompts tell the model the user's language; descriptions are kept in the language the user spoke/wrote.
 - French typography: a narrow no-break space before `:`, `?`, `!`, `%` in UI strings (e.g. `80 % du budget`).
 
-## 5. Data model (D1 / SQLite) — `migrations/0001_init.sql`
+## 5. Data model (D1 / SQLite) — `migrations/`
 
 Timestamps `*_at` are **Unix milliseconds** (INTEGER). `occurred_at` is the user's **local wall-clock time**
 as `YYYY-MM-DDTHH:MM` (TEXT, minute precision, no offset) because expenses are grouped by the user's day.
 Amounts are **integer minor units** (`amount_cents`) with a 3-letter `currency`. IDs are `crypto.randomUUID()`.
 
 ```sql
-users(id PK, email UNIQUE NOT NULL (lower-cased), password_hash NOT NULL, created_at)
+users(id PK, google_sub UNIQUE NOT NULL (Google's stable account id), email UNIQUE NOT NULL (verified by Google, lower-cased), created_at)
 sessions(id PK = sha256(token) hex, user_id FK→users ON DELETE CASCADE, created_at, expires_at, user_agent)
 settings(user_id PK FK→users CASCADE, currency 'CHF', language 'auto', budget_cents NULL, model 'gemini-2.5-flash',
          setup_complete 0, notif_reminder 0, notif_reminder_time '20:30', notif_reminder_only_if_empty 1,
@@ -293,21 +293,21 @@ categories(id PK, user_id FK CASCADE, name NOT NULL, position INT 0, created_at,
 entries(id PK, user_id FK CASCADE, amount_cents INT ≥ 0, currency, description NOT NULL, category_id FK→categories ON DELETE SET NULL,
         occurred_at TEXT, note NULL, source 'text'|'voice'|'photo'|'manual', raw_input NULL, created_at, updated_at)
   INDEX entries(user_id, occurred_at)
-login_attempts(email, ip '' (CF-Connecting-IP), attempted_at) INDEX(email, ip, attempted_at)
 push_subscriptions(id PK, user_id FK CASCADE, endpoint UNIQUE, p256dh, auth, user_agent, lang 'en', tz 'UTC', created_at, last_seen_at, failures 0)
 notification_log(user_id FK CASCADE, kind, period_key, sent_at, PRIMARY KEY(user_id, kind, period_key)) INDEX(sent_at)
 reminder_skips(user_id FK CASCADE, day 'YYYY-MM-DD', PRIMARY KEY(user_id, day)) INDEX(day)
 ```
 
-Signup creates the `users` row, a `settings` row with defaults and the default categories for the
-signup language (sent by the client as `language: 'en'|'fr'` in the signup body).
+The first sign-in of a Google account creates the `users` row, a `settings` row with defaults and the
+default categories for the language the sign-in link carried (`?lang=en|fr`). Later sign-ins find the row
+by `google_sub` and follow a changed Google address. `0002_google_sign_in.sql` rebuilt `users` for this
+(no account existed yet) and dropped `login_attempts`.
 
 ## 6. API contract (Worker, Hono, all under `/api`)
 
 Types live in `src/shared/api.ts` (authoritative). JSON in/out. Errors are
 `{ "error": { "code": string, "message": string } }` with codes:
-`unauthorized` 401 · `invalid_credentials` 401 · `email_taken` 409 · `invite_required` 403 · `signups_disabled` 403 ·
-`validation` 400 · `not_found` 404 · `rate_limited` 429 · `forbidden` 403 · `internal` 500.
+`unauthorized` 401 · `validation` 400 · `not_found` 404 · `rate_limited` 429 · `forbidden` 403 · `internal` 500.
 
 Auth: cookie `tally_session` (HttpOnly; `Secure` when the request is https; `SameSite=Lax`; `Path=/`; 30 days;
 renewed when < 15 days remain, at most once a day). State-changing requests must carry `Content-Type: application/json`
@@ -316,12 +316,11 @@ request origin (else 403). `requireUser` middleware puts `{ id, email }` on `c.v
 
 | Method & path | Body → Response |
 | --- | --- |
-| `POST /auth/signup` | `{ email, password (≥8), language: 'en'\|'fr', invite_code? }` → 201 `{ user }` + cookie. Env `SIGNUPS_ENABLED="false"` → 403 `signups_disabled`. Env `INVITE_CODE` set and ≠ body → 403 `invite_required`. |
-| `POST /auth/login` | `{ email, password }` → 200 `{ user }` + cookie. Generic `invalid_credentials`. 429 after ≥ 10 failures for that email from the caller's address (`CF-Connecting-IP`) in 15 min, or ≥ 100 for the email from all addresses; a successful login clears its own address's failures. |
+| `GET /auth/google/start?lang=en\|fr` | 302 to Google's authorization endpoint (scope `openid email`, `prompt=select_account`, PKCE S256, `state`, `nonce`) after setting the cookie `tally_oauth` = `state.nonce.verifier.lang` (HttpOnly, Lax, `Path=/api/auth/google`, 10 min). 500 `internal` when no client is configured. |
+| `GET /auth/google/callback?code&state` | Google's return (a navigation, so outcomes are redirects). Clears `tally_oauth`. `error=` → `/login?error=cancelled`; no cookie, foreign `state` or no code → `/login?error=failed`; the code is exchanged at the token endpoint (client secret + verifier) and the ID token's claims are checked (`iss`, `aud`, `exp`, `nonce`, `sub`, `email` with `email_verified`), any failure → `/login?error=failed`; the user is found by `sub` (a changed address is followed) or created, unless `SIGNUPS_ENABLED="false"` → `/login?error=signups_disabled`; an address held by another account → `/login?error=failed`. Then a session (replacing one already in the cookie) and 302 `/`. |
 | `POST /auth/logout` | → 204, deletes the session, clears the cookie. |
 | `GET /auth/me` | → `{ user, settings, categories }` (bootstrap). 401 if no session. |
-| `POST /auth/password` | `{ current, new }` → 204. Other sessions of the user are revoked. |
-| `DELETE /auth/account` | `{ password }` → 204, cascades everything. |
+| `DELETE /auth/account` | `{ email }` (the account's own, as confirmation; else 400) → 204, cascades everything. |
 | `GET /settings` · `PUT /settings` | `Partial<SettingsInput>` → `{ settings }`. Validates currency (3 upper letters), language, `budget_cents` (null or 0..1e9), model (1..80 chars), notification fields (`reminder_time` `HH:MM`). |
 | `GET /categories` · `PUT /categories` | PUT `{ categories: Array<{ id?: string, name: string }> }` replaces the list in order: existing ids are kept/renamed/re-positioned, missing ids are deleted (entries → `category_id = NULL`), new names are created. Names trimmed, 1..40 chars, unique case-insensitively. → `{ categories }`. |
 | `GET /entries?from=YYYY-MM-DD&to=YYYY-MM-DD` | inclusive day range, ≤ 366 days → `{ entries }` ordered by `occurred_at DESC, created_at DESC`. |
@@ -480,22 +479,22 @@ Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if
 ## 10. Testing
 
 - **Unit (node)**: `formatAmount`, `parseAmount`, period helpers (ISO week, month/year ranges, days left), CSV escaping, Gemini request builder (exact body), response parsing (fenced JSON, missing fields, zod failures → `bad_response`), WAV encoder header/bytes, i18n key parity, push payload builder.
-- **Worker**: signup/login/logout/me; invite code + signups disabled; rate limit; cookie flags; origin check; settings validation; categories replace semantics (rename keeps id, delete nulls entries); entries CRUD + batch + range validation + user isolation; summary math incl. previous period + by_day; CSV content; push subscribe/upsert/list/delete/skip; webpush RFC 8291 vector + VAPID header shape; scheduled: reminder window match, only-if-empty, skip, dedup, weekly/monthly keys, budget thresholds (highest only, logged all), subscription cleanup on 410.
-- **E2E (Playwright, Chromium 1194 at `/opt/pw-browsers`, viewport 390×844, DPR 2)**: Gemini mocked with `page.route('https://generativelanguage.googleapis.com/**')` returning fixtures; `PushManager.subscribe` faked via `addInitScript`. Flows: signup → setup (key check) → text log (single) → batch (three entries) → edit one → overview totals & bars → export CSV (download) → ask → settings: notifications on, test → logout → login → data still there. Screenshots saved to `e2e/__screenshots__/` (git-ignored) for visual review against the design.
+- **Worker**: Google sign-in start (redirect parameters, cookie) and callback (PKCE code exchange, claim checks, account creation per language, repeat sign-ins, address change, every refusal) against a stand-in token endpoint (`vi.spyOn(globalThis, 'fetch')`); logout/me; signups disabled; cookie flags; origin check; delete by email; settings validation; categories replace semantics (rename keeps id, delete nulls entries); entries CRUD + batch + range validation + user isolation; summary math incl. previous period + by_day; CSV content; push subscribe/upsert/list/delete/skip; webpush RFC 8291 vector + VAPID header shape; scheduled: reminder window match, only-if-empty, skip, dedup, weekly/monthly keys, budget thresholds (highest only, logged all), subscription cleanup on 410.
+- **E2E (Playwright, Chromium 1194 at `/opt/pw-browsers`, viewport 390×844, DPR 2)**: Gemini mocked with `page.route('https://generativelanguage.googleapis.com/**')` returning fixtures; `PushManager.subscribe` faked via `addInitScript`; Google replaced by `e2e/support/fake-google.ts`, a local authorize + token endpoint that `wrangler dev` is pointed at with `--var`. Flows: sign in → setup (key check) → text log (single) → batch (three entries) → edit one → overview totals & bars → export CSV (download) → ask → settings: notifications on, test → logout → sign in again → data still there. Screenshots saved to `e2e/__screenshots__/` (git-ignored) for visual review against the design.
 
 ## 11. Security
 
-- PBKDF2-SHA256, 100 000 iterations (Workers' limit), 16-byte random salt, 32-byte key; stored `pbkdf2$100000$<salt b64>$<hash b64>`; constant-time compare. Session token 32 random bytes (base64url) in the cookie, SHA-256 hex in `sessions.id`.
-- Generic login errors; login throttling via `login_attempts`; sign-up gated by `INVITE_CODE`/`SIGNUPS_ENABLED`.
+- Sign-in is Google's: OpenID Connect code flow with PKCE, `state` kept in an HttpOnly cookie (against login CSRF, compared in constant time), `nonce` bound to the ID token. The ID token comes straight from Google's token endpoint over TLS in exchange for the client secret, so its claims are checked but its signature is not (OpenID Connect Core §3.1.3.7). Session token 32 random bytes (base64url) in the cookie, SHA-256 hex in `sessions.id`.
+- No passwords, so nothing to throttle or reset; sign-ups closed by `SIGNUPS_ENABLED="false"`.
 - Same-origin check for mutating requests; `SameSite=Lax`; JSON content-type required; CSV via GET with cookie only.
 - Headers on HTML responses are set by Cloudflare assets; the API adds `Cache-Control: no-store`.
 - The Gemini key never reaches the Worker. Push payloads are end-to-end encrypted. No analytics, no third-party scripts, fonts self-hosted.
-- Known v1 limitations (documented in README): no email verification, no password reset (no email provider), no offline queueing.
+- Known v1 limitation (documented in README): no offline queueing.
 
 ## 12. Deployment
 
 - `wrangler.jsonc`: name `tally`, `main src/worker/index.ts`, assets `dist/`, D1 binding `DB` (`database_name: tally`, `database_id` placeholder patched by `scripts/setup-cloudflare.mjs`), `triggers.crons ["*/15 * * * *"]`, `vars.SIGNUPS_ENABLED "true"`, observability on.
-- Secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, optional `INVITE_CODE` (`wrangler secret put`).
+- Secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (`wrangler secret put`). The Google OAuth client (type "Web application") lists `https://<app>/api/auth/google/callback` and the localhost callbacks as redirect URIs; its consent screen links `/privacy`. The vars `GOOGLE_AUTH_URL` / `GOOGLE_TOKEN_URL` override Google's endpoints (only the e2e tests do).
 - GitHub Actions: `ci.yml` (check, unit + worker tests, build, e2e) on push/PR; `deploy.yml` on push to `main` when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets exist: install → build → `wrangler d1 migrations apply tally --remote` → `wrangler deploy`.
 - README: one-time setup (`npm i`, `npm run vapid`, `npm run setup:cloudflare`, secrets), local dev, tests, deploy, limitations.
 
@@ -511,10 +510,10 @@ Recorded after the build so the spec stays honest. Each item is deliberate.
 - **App, not web page**: the viewport is locked (`maximum-scale=1`, `user-scalable=no`, `interactive-widget=resizes-content`), pinch/double-tap zoom are also blocked by script for iOS Safari, overscroll bounce and pull-to-refresh are off, UI chrome is not selectable (quotes, answers and fields are), long-press callouts are off, phone/date/address auto-detection is off, and the composer/sheets follow the on-screen keyboard through `--kb` from the visual viewport (`src/app/lib/native-feel.ts`, `styles/native.css`).
 - **Push subscribe** (§8.1): the client re-posts the subscription on every app start (and on a language change), since `last_seen_at` only moves on that call and picks the zone for budget alerts.
 - **Scheduler** (§8.4): dedup keys carry the device zone, kinds are due for the hour after their time, each run has a D1 query budget of 40, claims are released when no device accepted a message, and old `reminder_skips`/`notification_log` rows are pruned. Budget alerts are queued once per month a batch touches. Accounts keep at most 10 devices.
-- **Login throttling** (§11): per email **and** address (10 in 15 min) with a global per-email cap (100).
+- **Sign in with Google** (§3.1, §6): replaced email + password before any account existed. The sign-in link carries the UI language so the first sign-in gets the right default categories; a sign-in over an existing session replaces it; an address that already belongs to another account is never handed over.
 - **`parseAmount`**: a single separator followed by exactly three digits is a thousands separator (`1,000` → 1 000.00); `0,500` stays 0.50.
 - **CSV export**: user-written columns are prefixed with an apostrophe when they start with `=`, `+`, `-`, `@`, tab or CR so spreadsheets never run them as formulas.
-- **Not shipped** (documented in the README): email verification, password reset, offline queueing.
+- **Not shipped** (documented in the README): offline queueing.
 - **Push client** (§8.1): the service worker registration is resolved before notification permission is requested; the stored device id is kept until the server confirms the delete (a failed delete is retried on the next call); deleting the account leaves push untouched unless the deletion succeeds, after which only the browser-side subscription is dropped.
 - **Home list**: when the month turns while the app is open, the new month goes on top and earlier loaded months are kept; "SHOW <MONTH> →" can go back past the account's first month to reach a back-dated entry; an entry saved into a month that is not loaded is placed by reloading rather than dropped. Entries dated in a future month appear when that month arrives.
 - **Coming back to the app**: one `onAppVisible` helper drives the bootstrap refresh, the ledger refresh and the service-worker update check, on `visibilitychange` and window focus, at most every 2 s and never right after registering.

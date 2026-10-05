@@ -5,10 +5,6 @@ import type { AppEnv } from '../env';
 
 const STATUS: Record<ErrorCode, number> = {
   unauthorized: 401,
-  invalid_credentials: 401,
-  email_taken: 409,
-  invite_required: 403,
-  signups_disabled: 403,
   validation: 400,
   not_found: 404,
   rate_limited: 429,

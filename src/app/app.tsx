@@ -10,6 +10,7 @@ import ToastHost from './components/ToastHost';
 import AuthScreen from './screens/Auth';
 import Home from './screens/Home';
 import Overview from './screens/Overview';
+import Privacy from './screens/Privacy';
 import Settings from './screens/Settings';
 import Setup from './screens/Setup';
 
@@ -56,9 +57,9 @@ function Routed() {
 function ScreenView({ screen }: { screen: Screen }) {
   switch (screen) {
     case 'login':
-      return <AuthScreen key="login" mode="login" />;
-    case 'signup':
-      return <AuthScreen key="signup" mode="signup" />;
+      return <AuthScreen />;
+    case 'privacy':
+      return <Privacy />;
     case 'setup':
       return <Setup />;
     case 'overview':

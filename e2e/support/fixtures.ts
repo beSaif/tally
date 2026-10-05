@@ -1,18 +1,19 @@
 /**
  * Shared helpers for the E2E specs. The Worker API is real (wrangler dev on E2E_PORT); only Gemini
- * (mock-gemini.ts) and the browser's push service (fake-push.ts + push-sink.ts) are stand-ins.
+ * (mock-gemini.ts), Google's sign-in (fake-google.ts) and the browser's push service (fake-push.ts +
+ * push-sink.ts) are stand-ins.
  */
 import { mkdirSync } from 'node:fs';
 import type { APIResponse, Page } from '@playwright/test';
 import type { Entry, NewEntry, SettingsInput, User } from '../../src/shared/api';
 import { MockGemini } from './mock-gemini';
 import { installFakePush } from './fake-push';
+import { fakeGoogle, type FakeGoogle } from './fake-google';
 
 /** The design page's "now": Monday 5 October 2026, 20:14 in Geneva. */
 export const FIXED_NOW = new Date('2026-10-05T20:14:00+02:00');
 /** Looks like a Google AI Studio key; masked it reads "AIza••••••••••••••Qx4" like the design. */
 export const TEST_KEY = 'AIzaSyD-tally-e2e-0123456789abcdefgQx4';
-export const PASSWORD = 'correct horse battery';
 export const SCREENSHOT_DIR = 'e2e/__screenshots__';
 /** Where fake subscriptions point when a test does not run a push sink (deliveries fail quietly). */
 const NOWHERE = 'http://127.0.0.1:9/push/';
@@ -27,9 +28,12 @@ export interface PrepareOptions {
   pushEndpoint?: string;
 }
 
-export async function prepare(page: Page, opts: PrepareOptions = {}): Promise<{ gemini: MockGemini }> {
+export async function prepare(page: Page, opts: PrepareOptions = {}): Promise<{ gemini: MockGemini; google: FakeGoogle }> {
   const gemini = opts.gemini ?? new MockGemini();
   await gemini.install(page);
+  // Whoever presses "Continue with Google" next is a brand-new account unless the test says otherwise.
+  const google = await fakeGoogle();
+  google.nextUser = { sub: uniqueSub(), email: uniqueEmail() };
   await installFakePush(page, opts.pushEndpoint ?? NOWHERE);
   if (opts.fixClock ?? true) await page.clock.setFixedTime(FIXED_NOW);
   if (opts.withKey) {
@@ -44,11 +48,16 @@ export async function prepare(page: Page, opts: PrepareOptions = {}): Promise<{ 
       }
     }, TEST_KEY);
   }
-  return { gemini };
+  return { gemini, google };
 }
 
 export function uniqueEmail(tag = 'lea'): string {
   return `${tag}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+}
+
+/** A Google account id nobody has signed in with (the local database outlives a test run). */
+export function uniqueSub(): string {
+  return `sub-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 async function ok<T>(res: APIResponse, what: string): Promise<T> {
@@ -58,22 +67,28 @@ async function ok<T>(res: APIResponse, what: string): Promise<T> {
 
 export interface Account {
   email: string;
-  password: string;
+  /** The Google account id; `google.nextUser = account` signs this account in again. */
+  sub: string;
   user: User;
 }
 
 /**
- * Creates an account through the real API. `page.request` shares the browser context's cookies,
- * so the page is signed in afterwards. `settings` (e.g. `{ setup_complete: true }`) is applied too.
+ * Creates an account through the real sign-in flow, against the stand-in Google. `page.request`
+ * follows the redirects and shares the browser context's cookies, so the page is signed in
+ * afterwards. `settings` (e.g. `{ setup_complete: true }`) is applied too.
  */
-export async function signUp(page: Page, opts: { email?: string; language?: 'en' | 'fr'; settings?: SettingsInput } = {}): Promise<Account> {
+export async function signUp(page: Page, opts: { email?: string; sub?: string; language?: 'en' | 'fr'; settings?: SettingsInput } = {}): Promise<Account> {
   const email = opts.email ?? uniqueEmail();
-  const { user } = await ok<{ user: User }>(
-    await page.request.post('/api/auth/signup', { data: { email, password: PASSWORD, language: opts.language ?? 'en' } }),
-    'signup',
-  );
+  const sub = opts.sub ?? uniqueSub();
+  const google = await fakeGoogle();
+  google.nextUser = { sub, email };
+  // Follows the redirects out to the stand-in and back; the last response is the app shell for `/`.
+  const landed = await page.request.get(`/api/auth/google/start?lang=${opts.language ?? 'en'}`);
+  if (!landed.ok()) throw new Error(`sign-in: HTTP ${landed.status()} ${await landed.text()}`);
+  const { user } = await ok<{ user: User }>(await page.request.get('/api/auth/me'), 'me after sign-in');
+  if (user.email !== email) throw new Error(`signed in as ${user.email}, expected ${email}`);
   if (opts.settings) await ok(await page.request.put('/api/settings', { data: opts.settings }), 'settings');
-  return { email, password: PASSWORD, user };
+  return { email, sub, user };
 }
 
 export async function seedEntries(page: Page, entries: readonly NewEntry[]): Promise<Entry[]> {
