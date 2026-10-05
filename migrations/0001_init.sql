@@ -61,9 +61,10 @@ CREATE INDEX entries_user_time ON entries(user_id, occurred_at);
 
 CREATE TABLE login_attempts (
   email        TEXT NOT NULL,
+  ip           TEXT NOT NULL DEFAULT '',     -- CF-Connecting-IP; '' when unknown
   attempted_at INTEGER NOT NULL
 );
-CREATE INDEX login_attempts_email ON login_attempts(email, attempted_at);
+CREATE INDEX login_attempts_email ON login_attempts(email, ip, attempted_at);
 
 CREATE TABLE push_subscriptions (
   id           TEXT PRIMARY KEY,
