@@ -15,7 +15,7 @@
       "binding": "DB",
       "database_name": "tally",
       // Replaced by `npm run setup:cloudflare` (or paste the id from `wrangler d1 create tally`).
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "42d69a53-4a63-4973-87c3-ae6bce9916d4",
       "migrations_dir": "migrations"
     }
   ],
