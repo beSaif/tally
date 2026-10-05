@@ -212,7 +212,7 @@ function DefaultsSection() {
             placeholder={t('setup.noBudget')}
             value={budget}
             // Sized to the text so "/ month" follows it, as in the design (mono digits are 1ch).
-            style={{ width: `${Math.max(6, budget.length + 1)}ch` }}
+            style={{ width: `calc(${Math.max(5, budget.length)}ch + 2px)` }}
             onInput={(e) => setBudget(e.currentTarget.value)}
             onBlur={saveBudget}
             onKeyDown={(e) => {

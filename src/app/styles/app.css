@@ -104,7 +104,7 @@ button.link {
 
 /* ---------- topline ---------- */
 .topline .wm-btn {
-  padding: 4px 0;
+  padding: 6px 0;
 }
 .topline .ibtn {
   justify-content: center;
@@ -114,7 +114,7 @@ button.link {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  margin-right: -4px;
+  margin: -6px -4px -6px 0;
 }
 .ibtn.xs svg {
   width: 19px;
@@ -546,6 +546,10 @@ button.link {
   justify-content: flex-start;
   gap: 2px;
   margin-left: -8px;
+}
+/* The arrows are 28px targets but the row keeps the height of its label, as in the design. */
+.period button {
+  margin: -7px 0;
 }
 .period .lbl {
   padding: 0 2px;

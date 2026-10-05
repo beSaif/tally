@@ -63,7 +63,7 @@ export function EntryFields({ draft, onChange, autoFocus }: { draft: EntryDraft;
           autoFocus={autoFocus}
           aria-invalid={amountBad}
           // Sized to the text (mono digits are 1ch each) so the currency sits right after it, as in the readout.
-          style={{ width: `${Math.max(4, draft.amount.length + 1)}ch` }}
+          style={{ width: `calc(${Math.max(4, draft.amount.length)}ch + 2px)` }}
           onInput={(e) => onChange({ amount: e.currentTarget.value })}
         />
         <span class="cur">{draft.currency}</span>

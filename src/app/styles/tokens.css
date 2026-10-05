@@ -134,8 +134,9 @@ textarea::placeholder {
   text-transform: uppercase;
   padding: 6px 0 10px;
   border-bottom: 1px solid var(--line);
-  min-height: 42px;
+  min-height: 35px;
 }
+/* Comfortable tap targets that do not make the line taller than the design's. */
 .topline button {
   font: inherit;
   letter-spacing: inherit;
@@ -144,6 +145,7 @@ textarea::placeholder {
   align-items: center;
   gap: 6px;
   padding: 6px 0;
+  margin: -6px 0;
 }
 .topline .right {
   display: inline-flex;
