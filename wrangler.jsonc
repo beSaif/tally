@@ -3,6 +3,7 @@
   "name": "tally",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-08-15",
+  "minify": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
