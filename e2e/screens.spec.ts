@@ -144,6 +144,27 @@ test('overview (A.3 + C.3): month, week, year, previous periods, deltas, ask', a
   await shot(page, 'screen-overview-ask-full', { fullPage: true });
 });
 
+test('overview: a question asked before the totals load still sends the totals per category', async ({ page }) => {
+  const { gemini } = await prepare(page, { withKey: true });
+  await designAccount(page);
+  // A slow connection: the period's summary has not arrived when the question is asked.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/api\/summary\?/, async (route) => {
+    await held;
+    await route.continue().catch(() => undefined);
+  });
+  await page.goto('/overview');
+  await page.getByLabel('Ask your data').fill('Where did most of my money go this month?');
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(page.locator('.answer')).toHaveText(/Groceries led at 32%\.$/);
+  await expect(page.locator('.ov-total')).toHaveClass(/pending/);
+  const system = (gemini.generateBodies.at(-1)?.systemInstruction?.parts ?? []).map((p) => p.text ?? '').join('\n');
+  expect(system).toContain('By category:\n- Groceries 412.30 CHF\n- Dining 286.10 CHF\n- Bills 240.00 CHF\n- Transport 148.80 CHF\n- Fun 119.40 CHF\n- Shopping 78.00 CHF\n');
+  release();
+  await expect(page.locator('.ov-total')).not.toHaveClass(/pending/);
+});
+
 test('settings: every section', async ({ page }) => {
   await prepare(page, { withKey: true });
   const account = await designAccount(page);

@@ -138,6 +138,13 @@ export function sumCents(entries: ReadonlyArray<{ amount_cents: number }>): numb
   return entries.reduce((s, e) => s + e.amount_cents, 0);
 }
 
+/** Totals per category name, largest first, like the summary's by_category (null: uncategorised). */
+export function totalsByCategory(entries: ReadonlyArray<{ category_name: string | null; amount_cents: number }>): Array<{ name: string | null; totalCents: number }> {
+  const totals = new Map<string | null, number>();
+  for (const e of entries) totals.set(e.category_name, (totals.get(e.category_name) ?? 0) + e.amount_cents);
+  return [...totals].map(([name, totalCents]) => ({ name, totalCents })).sort((a, b) => b.totalCents - a.totalCents);
+}
+
 /** Days of the period that have started (the current period counts up to today). */
 export function elapsedDays(range: DayRange, today: string): number {
   if (today < range.from) return 0;
