@@ -1,7 +1,6 @@
 /** Settings (spec §3.8): Gemini, defaults, categories, notifications, account, install, about. */
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { Category, Language, NotificationPrefs, PushSubscriptionRow } from '@shared/api';
-import { CURRENCIES } from '@shared/constants';
+import type { Category, NotificationPrefs, PushSubscriptionRow } from '@shared/api';
 import { toLocalDay } from '@shared/dates';
 import { formatAmount, parseAmount } from '@shared/money';
 import { version } from '../../../package.json';
@@ -15,7 +14,8 @@ import { showToast } from '../lib/toast';
 import { describeUserAgent } from '../lib/ua';
 import { back, navigate } from '../router';
 import AddChip from '../components/AddChip';
-import { Section, Select, Toggle } from '../components/Controls';
+import { Section, Toggle } from '../components/Controls';
+import DefaultsFields from '../components/DefaultsFields';
 import { IconTrash } from '../components/Icons';
 import KeyField, { KeyStatusLine, maskKey, useKeyCheck } from '../components/KeyField';
 
@@ -159,7 +159,6 @@ function DefaultsSection() {
   const [budget, setBudget] = useState(s?.budget_cents ? formatAmount(s.budget_cents) : '');
   useEffect(() => setBudget(s?.budget_cents ? formatAmount(s.budget_cents) : ''), [s?.budget_cents]);
   if (!s) return null;
-  const language = lang.value;
 
   const save = (input: Parameters<typeof updateSettings>[0]) => updateSettings(input).catch(saveFailed);
 
@@ -179,49 +178,17 @@ function DefaultsSection() {
 
   return (
     <Section title={t('settings.defaults')} id="set-defaults">
-      <div class="kv">
-        <div>{t('setup.currency')}</div>
-        <div>
-          <Select
-            label={t('setup.currency')}
-            value={s.currency}
-            options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.code} — ${c[language]}` }))}
-            onChange={(v) => void save({ currency: v })}
-          />
-        </div>
-        <div>{t('setup.language')}</div>
-        <div>
-          <Select
-            label={t('setup.language')}
-            value={s.language}
-            options={[
-              { value: 'auto', label: t('lang.auto') },
-              { value: 'en', label: t('lang.en') },
-              { value: 'fr', label: t('lang.fr') },
-            ]}
-            onChange={(v) => void save({ language: v as Language })}
-          />
-        </div>
-        <label for="set-budget">{t('setup.budget')}</label>
-        <div class="row budget">
-          <input
-            id="set-budget"
-            class="mono"
-            inputMode="decimal"
-            autocomplete="off"
-            placeholder={t('setup.noBudget')}
-            value={budget}
-            // Sized to the text so "/ month" follows it, as in the design (mono digits are 1ch).
-            style={{ width: `calc(${Math.max(5, budget.length)}ch + 2px)` }}
-            onInput={(e) => setBudget(e.currentTarget.value)}
-            onBlur={saveBudget}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
-            }}
-          />
-          <span class="mono per">{t('setup.perMonth')}</span>
-        </div>
-      </div>
+      <DefaultsFields
+        budgetId="set-budget"
+        currency={s.currency}
+        onCurrency={(v) => void save({ currency: v })}
+        language={s.language}
+        onLanguage={(v) => void save({ language: v })}
+        budget={budget}
+        onBudget={setBudget}
+        onBudgetBlur={saveBudget}
+        blurOnEnter
+      />
     </Section>
   );
 }

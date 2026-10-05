@@ -4,14 +4,15 @@
  */
 import { useEffect, useState } from 'preact/hooks';
 import type { Language } from '@shared/api';
-import { CURRENCIES, DEFAULT_CATEGORIES } from '@shared/constants';
+import { DEFAULT_CATEGORIES } from '@shared/constants';
 import { formatAmount, parseAmount } from '@shared/money';
-import { lang, resolveLanguage, t, type TKey } from '../i18n';
+import { resolveLanguage, t, type TKey } from '../i18n';
 import { defaultCurrency } from '../lib/region';
 import { categories, geminiKey, languagePreview, model, replaceCategories, saveGeminiKey, settings, updateSettings } from '../lib/store';
 import { navigate } from '../router';
 import AddChip from '../components/AddChip';
-import { Lines, Select } from '../components/Controls';
+import { Lines } from '../components/Controls';
+import DefaultsFields from '../components/DefaultsFields';
 import KeyField, { KeyStatusLine, useKeyCheck } from '../components/KeyField';
 
 const AI_STUDIO = 'https://aistudio.google.com/app/apikey';
@@ -103,8 +104,7 @@ function DefaultsStep({ current, total }: { current: number; total: number }) {
 
   useEffect(() => () => void (languagePreview.value = null), []);
 
-  const chooseLanguage = (value: string) => {
-    const next = value as Language;
+  const chooseLanguage = (next: Language) => {
     const before = resolveLanguage(language);
     const after = resolveLanguage(next);
     // Untouched default categories follow the language (renamed in place, so ids are kept).
@@ -147,56 +147,26 @@ function DefaultsStep({ current, total }: { current: number; total: number }) {
     }
   };
 
-  const language2 = lang.value;
   return (
     <main class="screen setup">
       <Steps current={current} total={total} />
       <h1 class="h1 headline defaults">
         <Lines text={t('setup.defaultsTitle')} />
       </h1>
-      <div class="kv">
-        <div>{t('setup.currency')}</div>
-        <div>
-          <Select
-            label={t('setup.currency')}
-            value={currency}
-            options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.code} — ${c[language2]}` }))}
-            onChange={setCurrency}
-          />
-        </div>
-        <div>{t('setup.language')}</div>
-        <div>
-          <Select
-            label={t('setup.language')}
-            value={language}
-            options={[
-              { value: 'auto', label: t('lang.auto') },
-              { value: 'en', label: t('lang.en') },
-              { value: 'fr', label: t('lang.fr') },
-            ]}
-            onChange={chooseLanguage}
-          />
-        </div>
-        <label for="setup-budget">{t('setup.budget')}</label>
-        <div class="row budget">
-          <input
-            id="setup-budget"
-            class="mono"
-            inputMode="decimal"
-            autocomplete="off"
-            placeholder={t('setup.noBudget')}
-            value={budget}
-            // Sized to the text so "/ month" follows it, as in the design (mono digits are 1ch).
-            style={{ width: `calc(${Math.max(5, budget.length)}ch + 2px)` }}
-            onInput={(e) => setBudget(e.currentTarget.value)}
-            onBlur={() => {
-              const cents = parseAmount(budget);
-              if (budget.trim() && cents !== null) setBudget(formatAmount(cents));
-            }}
-          />
-          <span class="mono per">{t('setup.perMonth')}</span>
-        </div>
-      </div>
+      <DefaultsFields
+        budgetId="setup-budget"
+        currency={currency}
+        onCurrency={setCurrency}
+        language={language}
+        onLanguage={chooseLanguage}
+        budget={budget}
+        onBudget={setBudget}
+        // Nothing is saved before "Start logging": leaving the field only tidies the number.
+        onBudgetBlur={() => {
+          const cents = parseAmount(budget);
+          if (budget.trim() && cents !== null) setBudget(formatAmount(cents));
+        }}
+      />
       <div class="lbl cats-lbl">{t('setup.categoriesHint')}</div>
       <div class="chips cats">
         {chips.map((c, i) => (
