@@ -4,6 +4,7 @@
  * plain-text "ask your data" answer.
  */
 import type { Page, Route } from '@playwright/test';
+import { DEFAULT_MODEL } from '../../src/shared/constants';
 
 /** One raw entry as Gemini returns it (amount is a decimal number, not cents). */
 export interface RawEntry {
@@ -80,16 +81,13 @@ interface GeminiPart {
   text?: string;
   inlineData?: { mimeType: string; data: string };
 }
-interface GeminiRequest {
+export interface GeminiRequest {
   systemInstruction?: { parts?: GeminiPart[] };
   contents?: Array<{ role?: string; parts?: GeminiPart[] }>;
   generationConfig?: { responseMimeType?: string };
 }
 
-export interface GeminiOverride {
-  status: number;
-  body: unknown;
-}
+export type GeminiOverride = { status: number; body: unknown } | { abort: true } | { text: string };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -100,6 +98,23 @@ export function nowFrom(req: GeminiRequest): string {
   if (m) return `${m[1]}T${m[2]}`;
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * "Ask your data": answers from the context the app sent (period total and the top category of
+ * the system instruction), so a test sees that the visible period's data reached Gemini.
+ */
+export function chooseAnswer(req: GeminiRequest, fallback: string): string {
+  const system = (req.systemInstruction?.parts ?? []).map((p) => p.text ?? '').join('\n');
+  const total = /Total: ([\d\u202f\u00a0 ]+\.\d{2}) ([A-Z]{3})/.exec(system);
+  const top = /By category:\n- (.+?) ([\d\u202f\u00a0 ]+\.\d{2}) [A-Z]{3}/.exec(system);
+  if (!total || !top) return fallback;
+  const cents = (s: string) => Math.round(Number(s.replace(/[^\d.]/g, '')) * 100);
+  const pct = Math.round((cents(top[2] ?? '0') / Math.max(1, cents(total[1] ?? '0'))) * 100);
+  const french = /Answer in French/.test(system);
+  return french
+    ? `Vous avez dépensé ${total[1]} ${total[2]}. ${top[1]} arrive en tête avec ${pct}\u202f%.`
+    : `You spent ${total[1]} ${total[2]}. ${top[1]} led at ${pct}%.`;
 }
 
 export function chooseParse(req: GeminiRequest): RawParse {
@@ -119,14 +134,15 @@ export function chooseParse(req: GeminiRequest): RawParse {
 const candidate = (text: string) => ({
   candidates: [{ content: { role: 'model', parts: [{ text }] }, finishReason: 'STOP', index: 0 }],
   usageMetadata: { promptTokenCount: 420, candidatesTokenCount: 80, totalTokenCount: 500 },
-  modelVersion: 'gemini-2.5-flash',
+  modelVersion: DEFAULT_MODEL,
 });
 
 export class MockGemini {
   readonly requests: Array<{ url: string; method: string; key: string | null; body: GeminiRequest | null }> = [];
   /** Responses used, in order, before the fixtures (errors, odd payloads). */
   readonly overrides: GeminiOverride[] = [];
-  answer = ASK_ANSWER;
+  /** A fixed "ask your data" answer; null answers from the request's context (chooseAnswer). */
+  answer: string | null = null;
   private held: Array<() => void> | null = null;
 
   async install(page: Page): Promise<void> {
@@ -146,6 +162,21 @@ export class MockGemini {
 
   failNext(status: number, message = 'error', reason?: string): void {
     this.overrides.push({ status, body: { error: { code: status, message, status: 'ERROR', ...(reason ? { details: [{ reason }] } : {}) } } });
+  }
+
+  /** The next generate request never reaches Google (no connection). */
+  dropNext(): void {
+    this.overrides.push({ abort: true });
+  }
+
+  /** The next generate request is answered with this model text (e.g. something that is not JSON). */
+  answerNext(text: string): void {
+    this.overrides.push({ text });
+  }
+
+  /** Bodies of the generate requests so far (parse and ask). */
+  get generateBodies(): GeminiRequest[] {
+    return this.requests.filter((r) => r.method === 'POST' && r.body).map((r) => r.body as GeminiRequest);
   }
 
   get generateCalls(): number {
@@ -186,10 +217,13 @@ export class MockGemini {
     if (this.held) await new Promise<void>((resolve) => this.held?.push(resolve) ?? resolve());
 
     const override = this.overrides.shift();
+    if (override && 'abort' in override) return route.abort('internetdisconnected');
+    if (override && 'text' in override) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(candidate(override.text)) });
     if (override) return route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) });
 
     if (body?.generationConfig?.responseMimeType === 'text/plain') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(candidate(this.answer)) });
+      const text = this.answer ?? chooseAnswer(body, ASK_ANSWER);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(candidate(text)) });
     }
     const parse = body ? chooseParse(body) : fixtures.empty('');
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(candidate(JSON.stringify(parse))) });
