@@ -26,9 +26,22 @@ export type NotifyOptions = NotificationOptions & {
 const KINDS: ReadonlySet<string> = new Set<PushKind>(['reminder', 'budget', 'weekly', 'monthly', 'test']);
 const FALLBACK: PushPayload = { kind: 'test', title: 'Tally', body: '', url: '/', tag: 'tally', lang: 'en' };
 
-/** An in-app path ("/overview?p=week"); anything else (other hosts, "//x") becomes "/". */
-export function appPath(url: unknown): string {
-  return typeof url === 'string' && /^\/(?!\/)/.test(url) ? url : '/';
+/** Stands in for the worker's origin where only the shape of a path matters (any http(s) origin resolves alike). */
+const ANY_ORIGIN = 'https://tally.invalid';
+
+/**
+ * An in-app path ("/overview?p=week"); anything that would leave the origin becomes "/". URL
+ * parsers read "/\x" like "//x" (another host) and drop tabs and newlines ("/\t/x" is "//x" too),
+ * so the pattern only screens the obvious cases and resolving the path decides.
+ */
+export function appPath(url: unknown, origin: string = ANY_ORIGIN): string {
+  if (typeof url !== 'string' || !/^\/(?![/\\])/.test(url)) return '/';
+  try {
+    const base = new URL(origin);
+    return new URL(url, base).origin === base.origin ? url : '/';
+  } catch {
+    return '/';
+  }
 }
 
 const text = (value: unknown, fallback: string): string => (typeof value === 'string' && value ? value : fallback);
@@ -104,7 +117,7 @@ export interface ClientsLike {
  * or opens a new window on that page.
  */
 export async function openApp(path: string, origin: string, clients: ClientsLike): Promise<void> {
-  const target = new URL(appPath(path), origin);
+  const target = new URL(appPath(path, origin), origin);
   const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true });
   const client = windows.find((c) => new URL(c.url).origin === origin);
   if (!client) {
