@@ -9,7 +9,7 @@ import { lang, t, type TKey } from '../i18n';
 import { api, isApiError } from '../lib/api';
 import { dayShortMonth } from '../lib/format';
 import { installed, installPrompt, promptInstall } from '../lib/install';
-import { currentSubscription, disablePush, enablePush, isIOS, permission, PushError, pushSupport } from '../lib/push';
+import { currentSubscription, disablePush, enablePush, isIOS, permission, PushError, pushSupport, unsubscribeLocally } from '../lib/push';
 import { categories, forgetGeminiKey, geminiKey, model, replaceCategories, saveGeminiKey, settings, signedOut, updateSettings, user } from '../lib/store';
 import { showToast } from '../lib/toast';
 import { describeUserAgent } from '../lib/ua';
@@ -322,7 +322,7 @@ function NotificationsSection() {
     setError(null);
     try {
       if (on) await enablePush(lang.value);
-      else await disablePush(rows);
+      else await disablePush();
       await refresh();
     } catch (err) {
       setError(err instanceof PushError && err.code === 'denied' ? 'settings.notifDenied' : 'settings.notifFailed');
@@ -349,7 +349,7 @@ function NotificationsSection() {
   const removeDevice = async (row: PushSubscriptionRow) => {
     setBusy(true);
     try {
-      if (sub && row.endpoint === sub.endpoint) await disablePush(rows);
+      if (sub && row.endpoint === sub.endpoint) await disablePush();
       else await api.pushDelete(row.id);
       await refresh();
     } catch {
@@ -506,7 +506,7 @@ function AccountSection() {
   const logout = async () => {
     setBusy(true);
     // This device should stop receiving this account's notifications once signed out.
-    await Promise.race([disablePushQuietly(), new Promise((r) => setTimeout(r, 2500))]);
+    await atMost(disablePushQuietly(), 2500);
     await api.logout().catch(() => undefined);
     signedOut();
     navigate('/login', { replace: true });
@@ -517,15 +517,17 @@ function AccountSection() {
     setBusy(true);
     setError(null);
     try {
-      await disablePushQuietly();
       await api.deleteAccount({ password: current });
-      forgetGeminiKey();
-      signedOut();
-      navigate('/signup', { replace: true });
     } catch (err) {
+      // Nothing changed, notifications on this device included.
       setBusy(false);
       setError(isApiError(err) && err.code === 'invalid_credentials' ? 'settings.wrongPassword' : 'settings.saveFailed');
+      return;
     }
+    await atMost(unsubscribeLocally(), 2500);
+    forgetGeminiKey();
+    signedOut();
+    navigate('/signup', { replace: true });
   };
 
   return (
@@ -613,15 +615,14 @@ function AccountSection() {
 }
 
 async function disablePushQuietly(): Promise<void> {
-  try {
-    if (!pushSupport().ok) return;
-    const sub = await currentSubscription();
-    if (!sub) return;
-    const { subscriptions } = await api.pushSubscriptions();
-    await disablePush(subscriptions);
-  } catch {
-    /* best effort: signing out must not depend on the push service */
-  }
+  if (!pushSupport().ok) return;
+  // Best effort: signing out must not depend on the push service.
+  await disablePush().catch(() => undefined);
+}
+
+/** Waits for `work`, but not longer than `ms`: leaving the account must not hang on the push service. */
+function atMost(work: Promise<unknown>, ms: number): Promise<unknown> {
+  return Promise.race([work, new Promise((resolve) => setTimeout(resolve, ms))]);
 }
 
 // ------------------------------------------------------------------ install
