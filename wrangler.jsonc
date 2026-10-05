@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tally",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-08-15",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/__scheduled", "/cdn-cgi/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tally",
+      // Replaced by `npm run setup:cloudflare` (or paste the id from `wrangler d1 create tally`).
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "vars": { "SIGNUPS_ENABLED": "true" },
+  "observability": { "enabled": true }
+}

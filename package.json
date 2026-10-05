@@ -1,0 +1,48 @@
+{
+  "name": "tally",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Minimal, AI-assisted expense tracker. PWA on Cloudflare Workers + D1; Gemini from the device.",
+  "type": "module",
+  "scripts": {
+    "dev": "mkdir -p dist && concurrently -k -n vite,worker -c cyan,magenta \"vite\" \"npm run dev:worker\"",
+    "dev:worker": "wrangler dev --port 8787 --test-scheduled",
+    "build": "vite build",
+    "preview": "npm run build && npm run db:migrate:local && wrangler dev --port 8787 --test-scheduled",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "test": "npm run test:unit && npm run test:worker",
+    "test:unit": "vitest run -c vitest.unit.config.ts",
+    "test:worker": "vitest run -c vitest.worker.config.ts",
+    "e2e": "playwright test",
+    "icons": "node scripts/icons.mjs",
+    "vapid": "node scripts/vapid.mjs",
+    "setup:cloudflare": "node scripts/setup-cloudflare.mjs",
+    "types": "wrangler types",
+    "db:migrate:local": "wrangler d1 migrations apply tally --local",
+    "db:migrate:remote": "wrangler d1 migrations apply tally --remote",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
+    "postinstall": "wrangler types"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.0.0",
+    "hono": "^4.13.13",
+    "preact": "^10.29.8",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@playwright/test": "1.56.0",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^22.20.5",
+    "concurrently": "^10.0.5",
+    "geist": "^1.7.2",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.6",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^4.1.11",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
+    "wrangler": "^4.147.0"
+  }
+}

@@ -1,4 +1,10 @@
 node_modules/
+dist/
 .wrangler/
 .dev.vars
 .DS_Store
+e2e/__screenshots__/
+test-results/
+playwright-report/
+*.log
+worker-configuration.d.ts

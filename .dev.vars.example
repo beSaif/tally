@@ -1,0 +1,9 @@
+# Copy to .dev.vars for local development (never commit .dev.vars).
+# `npm run vapid` fills the three VAPID_* values in for you.
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:you@example.com
+# Optional: require an invite code to sign up.
+# INVITE_CODE=
+# Optional: close sign-ups entirely ("false").
+# SIGNUPS_ENABLED=true
