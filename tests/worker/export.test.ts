@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ApiErrorBody, Entry, NewEntry } from '@shared/api';
-import { csvField, csvLine, entriesCsv, plainAmount } from '../../src/worker/lib/csv';
+import { csvField, csvLine, csvText, entriesCsv, plainAmount } from '../../src/worker/lib/csv';
 import { api, signup, type Session } from './helpers';
 
 const HEADER = 'date,time,amount,currency,description,category,note,source,id';
@@ -51,6 +51,20 @@ describe('CSV helpers', () => {
     expect(plainAmount(123_456_789)).toBe('1234567.89');
     expect(plainAmount(1_000_000_000)).toBe('10000000.00');
     expect(plainAmount(-1250)).toBe('-12.50');
+  });
+
+  it('neutralises spreadsheet formulas in user-written text', () => {
+    expect(csvText('=HYPERLINK("http://x")')).toBe("'=HYPERLINK(\"http://x\")");
+    expect(csvText('+1')).toBe("'+1");
+    expect(csvText('-5 francs')).toBe("'-5 francs");
+    expect(csvText('@user')).toBe("'@user");
+    expect(csvText('\tx')).toBe("'\tx");
+    expect(csvText('Coffee')).toBe('Coffee');
+    const csv = entriesCsv([
+      { id: 'i', amount_cents: 100, currency: 'CHF', description: '=cmd', category_id: null, category_name: null, occurred_at: '2026-10-05T12:00', note: '@n', source: 'manual', created_at: 0, updated_at: 0 },
+    ]);
+    expect(csv).toContain("'=cmd");
+    expect(csv).toContain("'@n");
   });
 
   it('writes a BOM and the header even with no entries', () => {

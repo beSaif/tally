@@ -11,6 +11,14 @@ export function csvField(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+/**
+ * User-written text may start with a character spreadsheets treat as a formula (=, +, -, @, tab,
+ * CR). A leading apostrophe makes Excel, Numbers and Sheets show it as text instead of running it.
+ */
+export function csvText(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 export function csvLine(fields: readonly string[]): string {
   return fields.map(csvField).join(',');
 }
@@ -31,9 +39,9 @@ export function entriesCsv(entries: readonly Entry[]): string {
       e.occurred_at.slice(11, 16),
       plainAmount(e.amount_cents),
       e.currency,
-      e.description,
-      e.category_name ?? '',
-      e.note ?? '',
+      csvText(e.description),
+      csvText(e.category_name ?? ''),
+      csvText(e.note ?? ''),
       e.source,
       e.id,
     ]),
