@@ -758,6 +758,11 @@ button.link {
   animation: toast-in 0.18s ease-out;
   white-space: normal;
 }
+/* With a sheet open the bottom belongs to it: the toast moves to the top instead of covering it. */
+body.has-sheet .toast {
+  bottom: auto;
+  top: calc(16px + var(--safe-t));
+}
 .toast span {
   line-height: 1.35;
 }

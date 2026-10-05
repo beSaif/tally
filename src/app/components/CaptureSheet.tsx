@@ -204,7 +204,8 @@ function Single({ state }: { state: ResultState }) {
 function Batch({ state }: { state: ResultState }) {
   const chosen = state.drafts.filter((d) => d.checked);
   const total = chosen.reduce((sum, d) => sum + (parseAmount(d.amount) ?? 0), 0);
-  const editing = state.editing.length > 0;
+  // One row opened by a tap still offers "Edit" (all rows); Cancel appears once all are open.
+  const allEditing = state.editing.length === state.drafts.length;
   return (
     <>
       <VoiceHead input={state.input} />
@@ -233,7 +234,7 @@ function Batch({ state }: { state: ResultState }) {
         </p>
       ) : null}
       <div class="btns">
-        {editing ? (
+        {allEditing ? (
           <button type="button" class="btn" onClick={cancelEditing} disabled={state.saving}>
             {t('common.cancel')}
           </button>
