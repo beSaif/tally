@@ -147,6 +147,11 @@ are account-wide; subscriptions are per device and can be removed from the devic
 Known limitation of this version: no offline queueing of entries (the shell works offline, logging
 needs a connection).
 
+On iPhone, a Home Screen web app is asked for the microphone at every launch, and again a while
+after the microphone was last released: iOS keeps no microphone choice for web apps, and Tally never
+holds the microphone open between notes to get around that. When the prompt takes your press, the
+note keeps recording in tap mode: tap **Stop & send** when you are done.
+
 ## Project layout
 
 ```

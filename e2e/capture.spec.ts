@@ -94,6 +94,47 @@ test('voice: a quick tap keeps listening until Stop & send; sliding up cancels',
   expect(gemini.generateCalls).toBe(before);
 });
 
+test.describe('a press the microphone permission prompt takes away (iPhone)', () => {
+  test('goes to tap mode at once; a late release changes nothing; Stop & send ends it', async ({ page }) => {
+    await page.addInitScript(() => {
+      // The Permissions API says the microphone will prompt, and "Allow" takes a second to arrive.
+      navigator.permissions.query = async () => ({ state: 'prompt' }) as PermissionStatus;
+      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (c) => new Promise((resolve, reject) => setTimeout(() => real(c).then(resolve, reject), 1200));
+    });
+    await home(page);
+    const sheet = sheetOf(page);
+    await pressMic(page, { holdMs: 100, release: false });
+    await expect(sheet.getByText('Tap to stop')).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Stop & send' })).toBeVisible();
+    // The finger lifting to tap "Allow" (when it reaches the page at all) must not send or cancel.
+    await page.mouse.up();
+    await expect(sheet.getByText('Tap to stop')).toBeVisible();
+    await expect(sheet.getByText(/Listening · 0:0[1-9]/)).toBeVisible();
+    await sheet.getByRole('button', { name: 'Stop & send' }).click();
+    await expect(sheet.getByText('Gemini parsed')).toBeVisible();
+    await expect(sheet.locator('.quote')).toHaveText(`“${VOICE_TRANSCRIPT}”`);
+  });
+
+  test('a pointercancel (the system took the touch) keeps listening in tap mode', async ({ page }) => {
+    await home(page);
+    const sheet = sheetOf(page);
+    await page.evaluate(() => {
+      document.addEventListener('pointerdown', (e) => ((window as unknown as { __pid: number }).__pid = e.pointerId), true);
+    });
+    await pressMic(page, { holdMs: 600, release: false });
+    await expect(sheet.getByText('Release to send')).toBeVisible();
+    await page.getByRole('button', { name: 'Record a voice note' }).evaluate((el) => {
+      el.dispatchEvent(new PointerEvent('pointercancel', { pointerId: (window as unknown as { __pid: number }).__pid, bubbles: true }));
+    });
+    await expect(sheet.getByText('Tap to stop')).toBeVisible();
+    await page.mouse.up();
+    await expect(sheet.getByText('Tap to stop')).toBeVisible();
+    await sheet.getByRole('button', { name: 'Stop & send' }).click();
+    await expect(sheet.getByText('Gemini parsed')).toBeVisible();
+  });
+});
+
 test('text: thinking, one entry, edit and cancel, save; Escape and the focus trap', async ({ page }) => {
   const { gemini } = await home(page);
   const sheet = sheetOf(page);

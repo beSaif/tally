@@ -1,7 +1,8 @@
 /**
  * The bottom input bar (spec §3.4): text (Enter sends), camera, and a mic that records on
  * pointerdown. Released within 300ms → tap mode (tap again to stop); held → release sends;
- * dragging up more than 80px before release cancels.
+ * dragging up more than 80px before release cancels. The hold/tap decision lives in lib/capture
+ * (releaseRecording), which also covers a press the microphone permission prompt takes away.
  */
 import { useEffect, useRef } from 'preact/hooks';
 import { t } from '../i18n';
@@ -10,16 +11,16 @@ import {
   composerFocusRequest,
   composerText,
   finishRecording,
+  keepListening,
   photoPickRequest,
+  releaseRecording,
   setCancelArmed,
-  setGesture,
   startRecording,
   submitPhoto,
   submitText,
 } from '../lib/capture';
 import { IconCam, IconMic, IconSend } from './Icons';
 
-const TAP_MS = 300;
 const CANCEL_PX = 80;
 
 export default function Composer() {
@@ -70,24 +71,15 @@ export default function Composer() {
     const p = press.current;
     if (!p || p.id !== e.pointerId) return;
     press.current = null;
-    const s = capture.value;
-    if (s.kind !== 'recording') return;
-    // Quick release, or the permission prompt took the press: keep listening until tapped again.
-    if (performance.now() - p.at < TAP_MS || s.starting) {
-      setCancelArmed(false);
-      setGesture('tap');
-      return;
-    }
-    setGesture('hold');
-    void finishRecording(!s.cancelArmed);
+    releaseRecording(performance.now() - p.at);
   };
 
+  // The system took the touch (a permission prompt, a call, …): nothing was said to be cancelled.
   const onMicCancel = (e: PointerEvent) => {
     const p = press.current;
     if (!p || p.id !== e.pointerId) return;
     press.current = null;
-    const s = capture.value;
-    if (s.kind === 'recording' && s.gesture === 'pending') void finishRecording(false);
+    keepListening();
   };
 
   // Keyboard activation (Enter/Space) has no pointer: toggle tap-mode recording.
@@ -146,7 +138,7 @@ export default function Composer() {
         ) : (
           <button
             type="button"
-            class={`ibtn ${state.kind === 'recording' ? 'acc' : 'dark'}`}
+            class={`ibtn mic ${state.kind === 'recording' ? 'acc' : 'dark'}`}
             aria-label={t('composer.mic')}
             aria-pressed={state.kind === 'recording'}
             onPointerDown={onMicDown}
