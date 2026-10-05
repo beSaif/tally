@@ -221,6 +221,20 @@ describe('weekly summary', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('never names a category of another user', async () => {
+    const stranger = await seedUser();
+    const secret = await addCategory(stranger, 'Secret project');
+    const userId = await seedUser();
+    // Not possible through the API (OWN_CATEGORY_SQL), so seeded directly.
+    await addEntries(userId, [{ amount_cents: 5000, occurred_at: '2026-09-30T12:00', category_id: secret }]);
+    const sub = await makeSubscriber(endpoint('foreign-category'));
+    await addSubscription(userId, sub, { tz: 'Europe/Zurich' });
+    const calls = mockPushService(201);
+
+    await runScheduled(env, MON_0905_LOCAL);
+    expect(await payloadsFor(calls, sub)).toMatchObject([{ kind: 'weekly', title: 'Last week: 50.00 CHF', body: 'Other led at 100% · 1 entry' }]);
+  });
+
   it('compares with the week before when that week had spending', async () => {
     const { userId, en } = await weeklyUser();
     await addEntries(userId, [{ amount_cents: 23_790, occurred_at: '2026-09-27T20:00' }]); // Sunday of the week before

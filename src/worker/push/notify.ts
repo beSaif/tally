@@ -5,9 +5,10 @@
  */
 import type { PushKind, PushPayload, ResolvedLanguage } from '@shared/api';
 import { BUDGET_THRESHOLDS } from '@shared/constants';
-import { addDays, daysLeftInMonth, monthRange, zonedParts } from '@shared/dates';
+import { daysLeftInMonth, monthRange, zonedParts } from '@shared/dates';
 import type { Env } from '../env';
 import { loadSettingsRow, nowMs } from '../lib/db';
+import { occurredBounds } from '../lib/range';
 import { budgetText } from './strings';
 import { sendWebPush, vapidFromEnv, type SendOptions, type SendResult, type Vapid } from './webpush';
 
@@ -152,9 +153,8 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   const month = today.slice(0, 7);
   if (occurredAt.slice(0, 7) !== month) return 0;
 
-  const range = monthRange(today);
-  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?')
-    .bind(userId, range.from, addDays(range.to, 1))
+  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?')
+    .bind(userId, ...occurredBounds(monthRange(today)))
     .first<{ total: number }>();
   const total = row?.total ?? 0;
   const crossed = BUDGET_THRESHOLDS.filter((t) => total * 100 >= t * budget);

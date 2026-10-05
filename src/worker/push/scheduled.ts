@@ -7,6 +7,7 @@ import { CRON_SLOT_MINUTES, MONTHLY_HOUR, WEEKLY_HOUR } from '@shared/constants'
 import { addDays, addMonths, floorToSlot, isoWeekKey, monthRange, zonedParts, type DayRange } from '@shared/dates';
 import type { Env } from '../env';
 import type { SettingsRow } from '../lib/db';
+import { occurredBounds } from '../lib/range';
 import { claimNotification, safeTimeZone, sendToSubscriptions, type SubscriptionRow } from './notify';
 import { monthlyText, reminderText, weeklyText, type TopCategory } from './strings';
 import { vapidFromEnv, type Vapid } from './webpush';
@@ -158,9 +159,9 @@ async function sendReminder(env: Env, settings: SettingsRow, item: Due, vapid: V
   const day = item.day;
   const state = await env.DB.prepare(
     `SELECT EXISTS (SELECT 1 FROM reminder_skips WHERE user_id = ?1 AND day = ?2) AS skipped,
-            EXISTS (SELECT 1 FROM entries WHERE user_id = ?1 AND occurred_at >= ?2 AND occurred_at < ?3) AS logged`,
+            EXISTS (SELECT 1 FROM entries WHERE user_id = ?1 AND occurred_at >= ?3 AND occurred_at <= ?4) AS logged`,
   )
-    .bind(userId, day, addDays(day, 1))
+    .bind(userId, day, ...occurredBounds({ from: day, to: day }))
     .first<{ skipped: number; logged: number }>();
   if (state?.skipped) return;
   if (settings.notif_reminder_only_if_empty === 1 && state?.logged) return;
@@ -238,16 +239,19 @@ async function sendMonthly(env: Env, settings: SettingsRow, item: Due, vapid: Va
   );
 }
 
-/** Totals for an inclusive day range, and the category that led it. */
+/**
+ * Totals for an inclusive day range, and the category that led it. The join carries the owner,
+ * as ENTRY_SELECT does, so a category name can only come from the user's own list.
+ */
 async function periodStats(env: Env, userId: string, range: DayRange): Promise<PeriodStats> {
   const { results } = await env.DB.prepare(
     `SELECT c.name AS name, SUM(e.amount_cents) AS total_cents, COUNT(*) AS count
-       FROM entries e LEFT JOIN categories c ON c.id = e.category_id
-      WHERE e.user_id = ? AND e.occurred_at >= ? AND e.occurred_at < ?
+       FROM entries e LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = e.user_id
+      WHERE e.user_id = ? AND e.occurred_at >= ? AND e.occurred_at <= ?
       GROUP BY e.category_id
       ORDER BY total_cents DESC, count DESC, name`,
   )
-    .bind(userId, range.from, addDays(range.to, 1))
+    .bind(userId, ...occurredBounds(range))
     .all<{ name: string | null; total_cents: number; count: number }>();
   const first = results[0];
   return {
@@ -258,8 +262,8 @@ async function periodStats(env: Env, userId: string, range: DayRange): Promise<P
 }
 
 async function periodTotal(env: Env, userId: string, range: DayRange): Promise<number> {
-  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?')
-    .bind(userId, range.from, addDays(range.to, 1))
+  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?')
+    .bind(userId, ...occurredBounds(range))
     .first<{ total: number }>();
   return row?.total ?? 0;
 }
