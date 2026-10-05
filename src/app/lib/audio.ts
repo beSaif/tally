@@ -179,8 +179,9 @@ export class Recorder {
   private starting: Promise<void> | null = null;
   private stopping: Promise<Blob> | null = null;
   private rejectStop: ((err: Error) => void) | null = null;
-  /** Bumped by cancel() so a start() still waiting for permission knows to give up. */
+  /** Bumped by start() and cancel() so a start() still waiting for permission knows it was abandoned. */
   private generation = 0;
+  private startingGeneration = 0;
 
   /** Container of the current or last recording ('' until a recording has started). */
   get mimeType(): string {
@@ -193,8 +194,11 @@ export class Recorder {
    * NotSupportedError; cancel() before permission was granted → AbortError.
    */
   async start(onLevel: (levels: Float32Array) => void): Promise<void> {
-    if (this.starting || this.session) throw namedError('InvalidStateError', 'The recorder is already running.');
+    // A start() that cancel() already abandoned does not block a new one; it cleans up after itself.
+    const busy = this.session !== null || (this.starting !== null && this.startingGeneration === this.generation);
+    if (busy) throw namedError('InvalidStateError', 'The recorder is already running.');
     const generation = ++this.generation;
+    this.startingGeneration = generation;
     // Created before the first await so it is born inside the caller's pointer gesture;
     // otherwise autoplay rules may keep it suspended and the waveform stays flat.
     const audio = createAudioContext();

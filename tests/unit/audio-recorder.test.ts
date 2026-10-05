@@ -273,6 +273,23 @@ describe('Recorder', () => {
     expect(FakeAudioContext.instances[0]?.closed).toBe(true);
   });
 
+  it('a new start() may follow cancel() while the first permission prompt is still open', async () => {
+    const firstPermission = deferred<FakeStream>();
+    const firstStream = new FakeStream();
+    getUserMedia.mockImplementationOnce(() => firstPermission.promise);
+    const recorder = new Recorder();
+    const firstStart = recorder.start(() => undefined);
+    recorder.cancel();
+    await recorder.start(() => undefined);
+    firstPermission.resolve(firstStream);
+    expect((await errorOf(firstStart)).name).toBe('AbortError');
+    expect(firstStream.track.stopped).toBe(true);
+    expect(stream.track.stopped).toBe(false);
+    FakeMediaRecorder.instances[0]?.emit([3]);
+    expect(Array.from(new Uint8Array(await (await recorder.stop()).arrayBuffer()))).toEqual([3, 9, 9]);
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+  });
+
   it('stop() right after start() waits for recording to begin, then stops', async () => {
     const permission = deferred<FakeStream>();
     getUserMedia.mockImplementationOnce(() => permission.promise);
