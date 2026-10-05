@@ -19,11 +19,12 @@ export default function App() {
   const language = lang.value;
 
   // Settings may change on another device: refresh them when the app comes back to the front.
+  // performance.now(): a monotonic clock, unaffected by the device changing its time.
   useEffect(() => {
-    let last = Date.now();
+    let last = performance.now();
     const onVisible = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - last < REFRESH_GAP_MS) return;
-      last = Date.now();
+      if (document.visibilityState !== 'visible' || performance.now() - last < REFRESH_GAP_MS) return;
+      last = performance.now();
       void refreshBootstrap();
     };
     document.addEventListener('visibilitychange', onVisible);

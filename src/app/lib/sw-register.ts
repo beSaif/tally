@@ -1,10 +1,11 @@
 /**
  * Service worker registration (production only) and the "Update ready · RELOAD" flow:
  * a new worker waits; RELOAD tells it to skip waiting and the page reloads on `controllerchange`.
- * Notification clicks from the worker arrive as `tally:navigate` messages and route in-app.
+ * Notification clicks from the worker arrive as NAVIGATE_MESSAGE messages and route in-app.
  */
 import { navigate } from '../router';
 import { translate, lang } from '../i18n';
+import { NAVIGATE_MESSAGE } from './sw-push';
 import { showToast } from './toast';
 
 let reloadRequested = false;
@@ -26,7 +27,7 @@ export function announceUpdate(worker: ServiceWorker | null): void {
 function listenForMessages(): void {
   navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
     const data = event.data as { type?: string; url?: string } | null;
-    if (data?.type === 'tally:navigate' && typeof data.url === 'string') {
+    if (data?.type === NAVIGATE_MESSAGE && typeof data.url === 'string') {
       const url = new URL(data.url, location.origin);
       if (url.origin === location.origin) navigate(url.pathname + url.search);
     }

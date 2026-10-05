@@ -27,11 +27,11 @@ export default function Home() {
 
   useEffect(() => {
     void loadCurrentMonth();
-    let last = Date.now();
+    let last = performance.now();
     // Another device may have logged something: refetch when the tab comes back.
     const refresh = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - last < REFRESH_GAP_MS) return;
-      last = Date.now();
+      if (document.visibilityState !== 'visible' || performance.now() - last < REFRESH_GAP_MS) return;
+      last = performance.now();
       void loadCurrentMonth();
     };
     document.addEventListener('visibilitychange', refresh);
