@@ -12,6 +12,12 @@ import { vapidFromEnv, type Vapid } from '../push/webpush';
 /** Per-device push subscriptions and the test / skip actions (docs/SPEC.md §6, §8). */
 export const pushRoutes = new Hono<AppEnv>();
 
+/**
+ * Devices kept per account. Each push is one outbound fetch, and a Free-plan cron run has 50 of
+ * them, so one account with endless stale browser profiles must not be able to use them all up.
+ */
+export const MAX_DEVICES_PER_USER = 10;
+
 pushRoutes.use('*', requireUser);
 
 const notConfigured = () => new ApiError('internal', 'Push notifications are not configured on this server');
@@ -65,6 +71,13 @@ pushRoutes.post('/subscribe', async (c) => {
     )
     .first<{ id: string }>();
   if (!row) throw new ApiError('internal', 'Subscription was not stored');
+  // Keep the most recently seen devices; the one just (re)subscribed has last_seen_at = now.
+  await c.env.DB.prepare(
+    `DELETE FROM push_subscriptions WHERE user_id = ?1 AND id NOT IN
+       (SELECT id FROM push_subscriptions WHERE user_id = ?1 ORDER BY last_seen_at DESC, created_at DESC LIMIT ?2)`,
+  )
+    .bind(c.var.user.id, MAX_DEVICES_PER_USER)
+    .run();
   return c.json({ id: row.id });
 });
 

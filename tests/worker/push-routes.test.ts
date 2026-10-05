@@ -89,6 +89,27 @@ describe('push routes', () => {
     });
   });
 
+  it('keeps at most ten devices per account, dropping the least recently seen', async () => {
+    const s = await signup();
+    const subs: Subscriber[] = [];
+    for (let i = 0; i < 12; i++) {
+      const sub = await makeSubscriber(endpoint(`cap${i}`));
+      subs.push(sub);
+      await subscribe(s, sub);
+      // Distinct last_seen_at values so the order is unambiguous.
+      await env.DB.prepare('UPDATE push_subscriptions SET last_seen_at = ? WHERE endpoint = ?').bind(1_000 + i, sub.endpoint).run();
+    }
+    const kept = (await list(s)).map((r) => r.endpoint).sort();
+    expect(kept).toHaveLength(10);
+    expect(kept).toEqual(subs.slice(2).map((x) => x.endpoint).sort());
+    // Re-subscribing an old device brings it back and evicts the oldest kept one.
+    await subscribe(s, subs[0]!);
+    const after = (await list(s)).map((r) => r.endpoint);
+    expect(after).toHaveLength(10);
+    expect(after).toContain(subs[0]!.endpoint);
+    expect(after).not.toContain(subs[2]!.endpoint);
+  });
+
   it('lists only the caller’s devices', async () => {
     const a = await signup();
     const b = await signup();

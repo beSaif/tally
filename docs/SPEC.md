@@ -332,7 +332,7 @@ request origin (else 403). `requireUser` middleware puts `{ id, email }` on `c.v
 | `GET /export.csv?from&to` | `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="tally-<from>_<to>.csv"`. Header `date,time,amount,currency,description,category,note,source,id`; RFC 4180 quoting; amount as `12.50`; UTF-8 BOM. |
 | `GET /push/vapid-public-key` | → `{ key }` (base64url of the 65-byte uncompressed P-256 public key). |
 | `GET /push/subscriptions` | → `{ subscriptions: [{ id, endpoint, user_agent, lang, tz, created_at, last_seen_at }] }`. |
-| `POST /push/subscribe` | `{ subscription: { endpoint, keys: { p256dh, auth } }, user_agent?, lang, tz }` → 200 `{ id }` (upsert on endpoint; re-subscribing updates keys/lang/tz/`last_seen_at`). |
+| `POST /push/subscribe` | `{ subscription: { endpoint, keys: { p256dh, auth } }, user_agent?, lang, tz }` → 200 `{ id }` (upsert on endpoint; re-subscribing updates keys/lang/tz/`last_seen_at`; an account keeps at most 10 devices, the least recently seen are dropped). |
 | `PATCH /push/subscriptions/:id` | `{ lang?, tz? }` → 204. |
 | `DELETE /push/subscriptions/:id` | → 204. |
 | `POST /push/test` | `{ endpoint?: string }` → `{ sent: number }` (that device, or all of the user's devices). |
