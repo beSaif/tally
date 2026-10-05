@@ -62,6 +62,33 @@ test('home: over budget turns the bar orange', async ({ page }) => {
   await expect(page.locator('.hero .fill')).toHaveClass(/acc/);
 });
 
+test('home: an entry saved into last month leaves this month alone and shows under "Show September →"', async ({ page }) => {
+  await prepare(page, { withKey: true });
+  await signUp(page, { settings: { setup_complete: true } });
+  await page.goto('/');
+  const empty = page.getByText('Nothing logged yet. Type a line or tap the mic.');
+  await expect(empty).toBeVisible();
+  const total = (await page.locator('.hero-num').textContent()) ?? '';
+  // A new account with an empty month: nothing further back to show yet.
+  await expect(page.getByRole('button', { name: /^Show / })).toHaveCount(0);
+
+  const composer = page.getByLabel('Describe an expense');
+  await composer.fill('Coffee 4.50');
+  await composer.press('Enter');
+  const sheet = page.getByRole('dialog', { name: 'New expense' });
+  await sheet.getByRole('button', { name: 'Edit', exact: true }).click();
+  await sheet.getByLabel('When').fill('2026-09-30T08:15');
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(sheet).toBeHidden();
+
+  // October's list and total are unchanged; the way to September appears and leads to the entry.
+  await expect(empty).toBeVisible();
+  await expect(page.locator('.hero-num')).toHaveText(total);
+  await page.getByRole('button', { name: 'Show September →' }).click();
+  await expect(page.getByRole('heading', { name: 'September 2026 · 4.50' })).toBeVisible();
+  await expect(page.locator('section.month .entries li')).toHaveText(/08:15\s*Coffee\s*Dining\s*4\.50/);
+});
+
 test('overview (A.3 + C.3): month, week, year, previous periods, deltas, ask', async ({ page }) => {
   const { gemini } = await prepare(page, { withKey: true });
   await designAccount(page);
