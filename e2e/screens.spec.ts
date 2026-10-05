@@ -273,3 +273,31 @@ test('install: Settings uses the captured prompt; the first log offers it once',
   await expect(page.locator('.entries li.fresh')).toContainText('3.80');
   await expect(toast).toHaveCount(0);
 });
+
+test.describe('notifications where push is not available', () => {
+  test('a browser without Web Push says so', async ({ page }) => {
+    await page.addInitScript(() => {
+      delete (window as unknown as { PushManager?: unknown }).PushManager;
+    });
+    await prepare(page, { withKey: true });
+    await designAccount(page);
+    await page.goto('/settings');
+    await expect(page.getByText('This browser cannot receive notifications.')).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Notifications on this device' })).toHaveCount(0);
+  });
+
+  test.describe('on an iPhone, in Safari', () => {
+    test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+
+    test('asks to add Tally to the Home Screen first', async ({ page }) => {
+      await prepare(page, { withKey: true });
+      await designAccount(page);
+      await page.goto('/settings');
+      await expect(page.getByText('On iPhone, add Tally to your Home Screen first, then enable notifications.')).toBeVisible();
+      await expect(page.getByText('In Safari, tap Share, then “Add to Home Screen”, and open Tally from your Home Screen.')).toBeVisible();
+      await expect(page.getByText('In Safari, tap Share, then “Add to Home Screen”.')).toBeVisible();
+      await page.getByRole('heading', { name: 'Notifications' }).scrollIntoViewIfNeeded();
+      await shot(page, 'screen-settings-ios');
+    });
+  });
+});

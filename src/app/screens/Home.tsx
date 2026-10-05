@@ -63,7 +63,7 @@ export default function Home() {
   return (
     <main class={`screen screen--list home${capture.value.kind !== 'idle' ? ' capturing' : ''}`}>
       <header class="topline">
-        <button type="button" class="wm-btn" aria-label={t('common.settings')} onClick={() => navigate('/settings')}>
+        <button type="button" class="wm-btn" aria-label={`Tally · ${t('common.settings')}`} onClick={() => navigate('/settings')}>
           <Wordmark />
         </button>
         <span class="right">
