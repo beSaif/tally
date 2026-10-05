@@ -500,7 +500,7 @@ function normalizeCurrency(code: string, fallback: string): string {
 }
 
 function fold(text: string): string {
-  return text.trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return text.trim().normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 }
 
 /** The person's own spelling of the category the model named (case-, space- and accent-insensitive); else null ("Other"). */
