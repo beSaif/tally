@@ -37,7 +37,7 @@ export default defineConfig({
   },
   projects: [{ name: 'e2e' }],
   webServer: {
-    command: `npm run build && npm run db:migrate:local && npx wrangler dev --port ${PORT} --test-scheduled`,
+    command: `npm run vapid && npm run build && npm run db:migrate:local && npx wrangler dev --port ${PORT} --test-scheduled`,
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
