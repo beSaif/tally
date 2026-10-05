@@ -53,7 +53,7 @@ export function EntryFields({ draft, onChange, autoFocus }: { draft: EntryDraft;
   return (
     <div class="kv edit">
       <label for={`${id}-a`}>{t('capture.amount')}</label>
-      <div class="row">
+      <div class="row amount-edit">
         <input
           id={`${id}-a`}
           class={`mono amount-input${amountBad ? ' bad' : ''}`}
@@ -62,6 +62,8 @@ export function EntryFields({ draft, onChange, autoFocus }: { draft: EntryDraft;
           value={draft.amount}
           autoFocus={autoFocus}
           aria-invalid={amountBad}
+          // Sized to the text (mono digits are 1ch each) so the currency sits right after it, as in the readout.
+          style={{ width: `${Math.max(4, draft.amount.length + 1)}ch` }}
           onInput={(e) => onChange({ amount: e.currentTarget.value })}
         />
         <span class="cur">{draft.currency}</span>
@@ -126,7 +128,7 @@ export function CompactFields({ draft, onChange }: { draft: EntryDraft; onChange
             ▾
           </span>
         </span>
-        <input class="mono cf-when" type="datetime-local" aria-label={t('capture.when')} value={draft.occurredAt} onInput={(e) => onChange({ occurredAt: e.currentTarget.value.slice(0, 16) })} />
+        <input class="cf-when" type="datetime-local" aria-label={t('capture.when')} value={draft.occurredAt} onInput={(e) => onChange({ occurredAt: e.currentTarget.value.slice(0, 16) })} />
       </div>
       <input class="cf-note" type="text" autocomplete="off" maxLength={500} aria-label={t('capture.note')} placeholder={`${t('capture.note')} · ${t('capture.optional')}`} value={draft.note} onInput={(e) => onChange({ note: e.currentTarget.value })} />
     </div>

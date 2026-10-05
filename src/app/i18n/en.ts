@@ -106,6 +106,7 @@ export const en = {
   'capture.tapToStop': 'Tap to stop',
   'capture.releaseToCancel': 'Release to cancel',
   'capture.stopSend': 'Stop & send',
+  'capture.slideToCancel': '↑ Slide up to cancel',
   'capture.thinkingListen': 'Gemini is listening…',
   'capture.thinkingRead': 'Gemini is reading…',
   'capture.voiceNote': 'Voice note · {time}',

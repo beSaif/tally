@@ -94,7 +94,7 @@ export default function EntrySheet({ entry, onClose }: { entry: Entry; onClose: 
   };
 
   return (
-    <Sheet label={t('entry.title')} onClose={busy ? undefined : onClose} focusKey={confirming ? 'confirm' : 'edit'} initialFocus={confirming ? '.btn' : '.btn.primary'}>
+    <Sheet label={t('entry.title')} onClose={busy ? undefined : onClose} focusKey={confirming ? 'confirm' : 'edit'}>
       <div class="sheet-head">
         <span class="lbl">{t('entry.title')}</span>
         <button type="button" class="ibtn ghost sm" aria-label={t('entry.delete')} onClick={() => setConfirming(true)} disabled={busy || confirming}>

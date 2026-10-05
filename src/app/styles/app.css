@@ -158,8 +158,9 @@ button.link {
   margin-top: 12px;
   font-size: 12px;
 }
-.bottom .switch {
+.auth-switch {
   display: block;
+  align-self: center;
   text-align: center;
   margin-top: 16px;
 }
@@ -210,15 +211,21 @@ button.link {
   padding: 2px 10px;
   width: 9.5em;
 }
+/* Setup/settings values that read as text (design 00.2) and only show their rule while focused. */
+.kv .row.budget {
+  justify-content: flex-start;
+}
 .kv .row.budget input,
-.kv .row input.mono {
+.kv input.bare {
   border-bottom: 0;
-  flex: 1;
   min-width: 0;
   font-size: 16px;
 }
+.kv .row.budget input {
+  flex: 0 1 auto;
+}
 .kv .row.budget input:focus,
-.kv input.mono:focus {
+.kv input.bare:focus {
   box-shadow: 0 1px 0 var(--ink);
 }
 .kv .per {
@@ -287,6 +294,11 @@ button.link {
 }
 
 /* ---------- capture sheet ---------- */
+/* The dialog takes focus when it opens; only its controls show a focus ring. */
+.sheet:focus,
+.sheet:focus-visible {
+  outline: none;
+}
 .sheet-head .state {
   display: inline-flex;
   align-items: center;
@@ -297,9 +309,25 @@ button.link {
 }
 .wave-wrap {
   margin: 12px 0 10px;
+  transition: opacity 0.15s;
 }
-.btns.ghosted {
-  visibility: hidden;
+.wave-wrap.armed {
+  opacity: 0.3;
+}
+.hold-hint {
+  text-align: center;
+  margin: 14px 0 4px;
+}
+.btn.with-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+.btn.with-icon svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }
 .capture .source {
   margin-top: 2px;
@@ -309,10 +337,9 @@ button.link {
 }
 .capture .quote.big-quote {
   font-size: 16px;
-  margin-top: 8px;
 }
 .lbl.you {
-  margin-top: 4px;
+  margin: 4px 0 8px;
 }
 .thumb {
   width: 64px;
@@ -359,6 +386,9 @@ button.link {
 }
 
 /* edit mode inside the kv */
+.kv .row.amount-edit {
+  justify-content: flex-start;
+}
 .kv.edit > :nth-child(even) {
   padding: 7px 0 8px;
 }
@@ -369,8 +399,9 @@ button.link {
   font-family: var(--mono);
   font-size: 20px;
   font-weight: 500;
-  width: 7.5em;
   flex: 0 1 auto;
+  min-width: 4ch;
+  max-width: 100%;
 }
 .kv input.bad,
 .cfields input.bad {
@@ -459,7 +490,7 @@ button.link {
   align-items: end;
 }
 .cf-row + .cf-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
 }
 .cfields input,
 .cfields .sel {
@@ -476,8 +507,9 @@ button.link {
   font-family: var(--mono);
   font-weight: 500;
 }
+/* Native date-time controls are wide (and follow the device's format), so this one is set in the
+   narrower sans at 14px to fit next to the category on a phone. */
 .cf-when {
-  font-family: var(--mono);
   font-size: 14px !important;
 }
 .total-row {
@@ -659,11 +691,13 @@ button.link {
 .rows li.dimmed .n {
   color: var(--mute);
 }
+/* Intrinsic width: the native control shows 24 h or AM/PM depending on the device. */
 .rows input.time {
   font-size: 16px;
   border-bottom: 1px solid var(--ink);
   padding: 2px 0;
-  width: 5.2em;
+  width: auto;
+  min-width: 5.2em;
   text-align: right;
 }
 .rows input.time:disabled {

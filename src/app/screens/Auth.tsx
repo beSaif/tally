@@ -129,7 +129,7 @@ export default function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
           <button type="submit" class="btn primary" disabled={busy} aria-busy={busy}>
             {busy ? '…' : signup ? t('auth.createAccount') : t('auth.logIn')}
           </button>
-          <a class="link switch" href={signup ? '/login' : '/signup'} onClick={linkTo(signup ? '/login' : '/signup')}>
+          <a class="link auth-switch" href={signup ? '/login' : '/signup'} onClick={linkTo(signup ? '/login' : '/signup')}>
             {signup ? t('auth.haveAccount') : t('auth.newHere')}
           </a>
         </div>

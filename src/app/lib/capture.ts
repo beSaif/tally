@@ -7,10 +7,9 @@ import type { EntrySource, NewEntry } from '@shared/api';
 import { isValidMinute, toLocalMinute } from '@shared/dates';
 import { parseAmount } from '@shared/money';
 import { GeminiError, parseExpenses, type GeminiErrorCode, type ParseInput, type ParsedEntry } from './gemini';
-import { Recorder, blobToWav16k } from './audio';
-import { downscaleToJpeg } from './image';
+import { Recorder } from './audio';
 import { api } from './api';
-import { BAR_COUNT, LevelMeter } from './bars';
+import { BAR_COUNT, LevelMeter, loudness, voiceprint } from './bars';
 import { amountInputValue, normalizeMinute } from './format';
 import { addEntries } from './ledger';
 import { categoryIdFor, categoryNames, currency, geminiKey, model } from './store';
@@ -19,12 +18,14 @@ import { lang, type TKey } from '../i18n';
 export const MAX_RECORDING_MS = 60_000;
 /** Shorter than this is almost always an accidental tap: nothing useful to send. */
 const MIN_RECORDING_MS = 500;
+/** Loudness frames kept for the voice-note shape (60 s at 60 fps). */
+const MAX_HISTORY = 3600;
 
 export type CaptureMode = 'voice' | 'text' | 'photo';
 
 export type CaptureInput =
   | { mode: 'text'; text: string }
-  | { mode: 'voice'; blob: Blob; durationMs: number; wave: number[] }
+  | { mode: 'voice'; blob: Blob; durationMs: number; wave: number[] | null }
   | { mode: 'photo'; blob: Blob; thumbUrl: string };
 
 export interface Draft {
@@ -41,11 +42,24 @@ export interface Draft {
 export type Gesture = 'pending' | 'tap' | 'hold';
 export type CaptureErrorCode = GeminiErrorCode | 'mic' | 'micDenied' | 'tooShort';
 
+export interface ResultState {
+  kind: 'result';
+  input: CaptureInput;
+  transcript: string;
+  drafts: Draft[];
+  /** Keys of the drafts shown as editable fields. */
+  editing: readonly string[];
+  /** The drafts as they were before editing began, for "Cancel". */
+  before: Draft[] | null;
+  saving: boolean;
+  error: TKey | null;
+}
+
 export type CaptureState =
   | { kind: 'idle' }
   | { kind: 'recording'; gesture: Gesture; cancelArmed: boolean; starting: boolean }
   | { kind: 'thinking'; input: CaptureInput }
-  | { kind: 'result'; input: CaptureInput; transcript: string; drafts: Draft[]; editing: readonly string[]; saving: boolean; error: TKey | null }
+  | ResultState
   | { kind: 'empty'; input: CaptureInput; transcript: string; reply: string | null }
   | { kind: 'error'; input: CaptureInput | null; code: CaptureErrorCode };
 
@@ -63,7 +77,7 @@ let recorder: Recorder | null = null;
 let recordStart = 0;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let maxTimer: ReturnType<typeof setTimeout> | undefined;
-let lastWave: number[] = [];
+let history: number[] = [];
 let inflight: AbortController | null = null;
 /** Text cleared from the composer on a successful parse; given back if the sheet is dismissed unsaved. */
 let restoreText: string | null = null;
@@ -83,26 +97,31 @@ function inputOf(state: CaptureState): CaptureInput | null {
 
 // ---------------------------------------------------------------- voice
 
+/**
+ * Starts listening. Call it synchronously from the pointerdown handler: the Recorder creates its
+ * AudioContext and asks for the microphone inside that user gesture.
+ */
 export async function startRecording(gesture: Gesture = 'pending'): Promise<void> {
   if (capture.value.kind !== 'idle') return;
   const rec = new Recorder();
   const meter = new LevelMeter();
   recorder = rec;
-  lastWave = [];
+  history = [];
   levels.value = new Array<number>(BAR_COUNT).fill(0);
   elapsedMs.value = 0;
   capture.value = { kind: 'recording', gesture, cancelArmed: false, starting: true };
   try {
     await rec.start((l) => {
       if (recorder !== rec) return;
-      const bars = meter.push(l);
-      levels.value = bars;
-      lastWave = bars;
+      levels.value = meter.push(l);
+      if (history.length < MAX_HISTORY) history.push(loudness(l));
     });
   } catch (err) {
     if (recorder !== rec) return;
     recorder = null;
     const name = err instanceof Error || err instanceof DOMException ? err.name : '';
+    // AbortError: cancelled while the permission prompt was up; nothing to report.
+    if (name === 'AbortError') return;
     capture.value = { kind: 'error', input: null, code: name === 'NotAllowedError' || name === 'SecurityError' ? 'micDenied' : 'mic' };
     return;
   }
@@ -125,10 +144,6 @@ export function setGesture(gesture: Gesture): void {
 export function setCancelArmed(armed: boolean): void {
   const s = capture.value;
   if (s.kind === 'recording' && s.cancelArmed !== armed) capture.value = { ...s, cancelArmed: armed };
-}
-
-export function isRecording(): boolean {
-  return capture.value.kind === 'recording';
 }
 
 export async function finishRecording(send: boolean): Promise<void> {
@@ -154,7 +169,7 @@ export async function finishRecording(send: boolean): Promise<void> {
     capture.value = { kind: 'error', input: null, code: 'tooShort' };
     return;
   }
-  await run({ mode: 'voice', blob, durationMs, wave: lastWave });
+  await run({ mode: 'voice', blob, durationMs, wave: voiceprint(history) });
 }
 
 // ---------------------------------------------------------------- text & photo
@@ -172,21 +187,19 @@ export function submitPhoto(file: Blob): void {
 
 // ---------------------------------------------------------------- Gemini
 
-async function toParseInput(input: CaptureInput): Promise<ParseInput> {
+/** The raw recording or picked file: parseExpenses converts it (16 kHz WAV, downscaled JPEG) itself. */
+function toParseInput(input: CaptureInput): ParseInput {
   if (input.mode === 'text') return { kind: 'text', text: input.text };
-  if (input.mode === 'voice') {
-    // 16 kHz mono WAV is smaller and always accepted; fall back to the recorded container.
-    const wav = await blobToWav16k(input.blob).catch(() => input.blob);
-    return { kind: 'audio', blob: wav };
-  }
-  const jpeg = await downscaleToJpeg(input.blob, 1600, 0.85).catch(() => input.blob);
-  return { kind: 'image', blob: jpeg };
+  if (input.mode === 'voice') return { kind: 'audio', blob: input.blob };
+  return { kind: 'image', blob: input.blob };
 }
 
-function toDraft(p: ParsedEntry, i: number, now: string): Draft {
+let draftSeq = 0;
+
+function toDraft(p: ParsedEntry, now: string): Draft {
   const code = (p.currency || '').trim().toUpperCase();
   return {
-    key: `${Date.now().toString(36)}-${i}`,
+    key: `d${++draftSeq}`,
     amount: amountInputValue(Math.max(0, Math.round(p.amount_cents))),
     description: p.description.trim(),
     categoryId: categoryIdFor(p.category),
@@ -204,15 +217,15 @@ async function run(input: CaptureInput): Promise<void> {
   inflight = ctrl;
   capture.value = { kind: 'thinking', input };
   if (!apiKey) {
+    inflight = null;
     capture.value = { kind: 'error', input, code: 'invalid_key' };
     return;
   }
   try {
-    const parseInput = await toParseInput(input);
     const now = new Date();
     const result = await parseExpenses(
       { apiKey, model: model.value },
-      parseInput,
+      toParseInput(input),
       {
         now,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -237,8 +250,9 @@ async function run(input: CaptureInput): Promise<void> {
       kind: 'result',
       input,
       transcript: result.transcript,
-      drafts: result.entries.map((p, i) => toDraft(p, i, nowMinute)),
+      drafts: result.entries.map((p) => toDraft(p, nowMinute)),
       editing: [],
+      before: null,
       saving: false,
       error: null,
     };
@@ -246,6 +260,7 @@ async function run(input: CaptureInput): Promise<void> {
     if (inflight !== ctrl) return;
     inflight = null;
     const code: GeminiErrorCode = err instanceof GeminiError ? err.code : 'unknown';
+    // "aborted" is a cancel the person asked for: the sheet is already closed.
     if (code === 'aborted') return;
     capture.value = { kind: 'error', input, code };
   }
@@ -253,7 +268,7 @@ async function run(input: CaptureInput): Promise<void> {
 
 // ---------------------------------------------------------------- result editing
 
-function patchResult(fn: (s: Extract<CaptureState, { kind: 'result' }>) => Extract<CaptureState, { kind: 'result' }>): void {
+function patchResult(fn: (s: ResultState) => ResultState): void {
   const s = capture.value;
   if (s.kind === 'result') capture.value = fn(s);
 }
@@ -266,12 +281,30 @@ export function toggleDraft(key: string): void {
   patchResult((s) => ({ ...s, drafts: s.drafts.map((d) => (d.key === key ? { ...d, checked: !d.checked } : d)) }));
 }
 
+/** Edit mode for these drafts; the first edit remembers the values to go back to. */
+function startEditing(s: ResultState, keys: readonly string[]): ResultState {
+  const editing = [...new Set([...s.editing, ...keys])];
+  return { ...s, editing, before: s.before ?? s.drafts.map((d) => ({ ...d })) };
+}
+
 export function editAll(): void {
-  patchResult((s) => ({ ...s, editing: s.drafts.map((d) => d.key) }));
+  patchResult((s) => startEditing(s, s.drafts.map((d) => d.key)));
 }
 
 export function editDraft(key: string): void {
-  patchResult((s) => (s.editing.includes(key) ? s : { ...s, editing: [...s.editing, key] }));
+  patchResult((s) => (s.editing.includes(key) ? s : startEditing(s, [key])));
+}
+
+/** "Cancel" in edit mode: the parsed values come back (ticks stay as they are now). */
+export function cancelEditing(): void {
+  patchResult((s) => {
+    const before = new Map((s.before ?? []).map((d) => [d.key, d]));
+    const drafts = s.drafts.map((d) => {
+      const old = before.get(d.key);
+      return old ? { ...old, checked: d.checked } : d;
+    });
+    return { ...s, drafts, editing: [], before: null, error: null };
+  });
 }
 
 function draftProblem(d: Draft): TKey | null {
@@ -290,7 +323,7 @@ export async function saveCapture(): Promise<boolean> {
   for (const d of chosen) {
     const problem = draftProblem(d);
     if (problem) {
-      capture.value = { ...s, error: problem, editing: s.editing.includes(d.key) ? s.editing : [...s.editing, d.key] };
+      capture.value = { ...startEditing(s, [d.key]), error: problem };
       return false;
     }
   }
@@ -301,6 +334,7 @@ export async function saveCapture(): Promise<boolean> {
     amount_cents: parseAmount(d.amount) ?? 0,
     currency: d.currency,
     description: d.description.trim(),
+    // An explicit id (null = Other) and never a name as well: the API lets the id win anyway.
     category_id: d.categoryId,
     occurred_at: d.occurredAt,
     note: d.note.trim() || null,

@@ -1,6 +1,8 @@
 /**
  * Bottom sheet over a white dim (design A.2): Escape closes, Tab stays inside, focus returns to
- * where it was. `focusKey` re-focuses the first control when the content changes state.
+ * where it was. The dialog itself takes focus when it opens or changes state (`focusKey`), so a
+ * screen reader announces it and no control wears a focus ring the person did not ask for; Tab
+ * then walks the controls. `initialFocus` (a CSS selector) moves focus to a field instead.
  */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
@@ -15,8 +17,9 @@ export interface SheetProps {
   label: string;
   onClose?: () => void;
   children: ComponentChildren;
+  /** A new value re-focuses the sheet (the content changed state). */
   focusKey?: string;
-  /** Initial focus target inside the sheet (CSS selector); defaults to the first control. */
+  /** Focus target inside the sheet (CSS selector); defaults to the dialog itself. */
   initialFocus?: string;
   class?: string;
 }
@@ -40,16 +43,19 @@ export default function Sheet({ label, onClose, children, focusKey, initialFocus
       const items = focusables(root);
       const first = items[0];
       const last = items[items.length - 1];
+      const active = document.activeElement;
       if (!first || !last) {
         e.preventDefault();
         root.focus();
         return;
       }
-      const active = document.activeElement;
-      if (e.shiftKey && (active === first || !root.contains(active))) {
+      if (active === root || !root.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && active === first) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && (active === last || !root.contains(active))) {
+      } else if (!e.shiftKey && active === last) {
         e.preventDefault();
         first.focus();
       }
@@ -69,10 +75,8 @@ export default function Sheet({ label, onClose, children, focusKey, initialFocus
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
-    const target = (initialFocus && root.querySelector<HTMLElement>(initialFocus)) || focusables(root)[0] || root;
-    if (!root.contains(document.activeElement) || document.activeElement === root || focusKey !== undefined) {
-      target.focus({ preventScroll: true });
-    }
+    const target = (initialFocus && root.querySelector<HTMLElement>(initialFocus)) || root;
+    target.focus({ preventScroll: true });
   }, [focusKey]);
 
   return (

@@ -107,6 +107,7 @@ export const fr: Dict = {
   'capture.tapToStop': 'Touchez pour arrêter',
   'capture.releaseToCancel': 'Relâchez pour annuler',
   'capture.stopSend': 'Arrêter et envoyer',
+  'capture.slideToCancel': '↑ Glissez vers le haut pour annuler',
   'capture.thinkingListen': 'Gemini écoute…',
   'capture.thinkingRead': 'Gemini lit…',
   'capture.voiceNote': 'Message vocal · {time}',

@@ -40,9 +40,7 @@ export class LevelMeter {
 
   push(levels: ArrayLike<number>): number[] {
     if (levels.length >= 8) return resample(levels, this.n);
-    let sum = 0;
-    for (let i = 0; i < levels.length; i++) sum += clamp01(levels[i] ?? 0);
-    const level = levels.length ? sum / levels.length : 0;
+    const level = loudness(levels);
     const visible = this.n - BAR_TAIL;
     this.history.push(level);
     if (this.history.length > visible) this.history.splice(0, this.history.length - visible);
@@ -53,13 +51,38 @@ export class LevelMeter {
   }
 }
 
+/** Mean level of one report (0..1): the loudness of that frame. */
+export function loudness(levels: ArrayLike<number>): number {
+  let sum = 0;
+  for (let i = 0; i < levels.length; i++) sum += clamp01(levels[i] ?? 0);
+  return levels.length ? sum / levels.length : 0;
+}
+
+/**
+ * The shape of a whole recording from its per-frame loudness: `n` bars, scaled so the loudest is
+ * full height (a quiet room still reads as speech). Empty or silent recordings give null.
+ */
+export function voiceprint(history: readonly number[], n = BAR_COUNT): number[] | null {
+  if (history.length === 0) return null;
+  const bars = resample(history, n);
+  const peak = Math.max(...bars);
+  if (!(peak > 0.02)) return null;
+  return bars.map((v) => v / peak);
+}
+
 /** The design's illustrative wave: |sin(i·.55)·cos(i·.23)|. */
 export function designWave(n = BAR_COUNT): number[] {
   return Array.from({ length: n }, (_, i) => Math.abs(Math.sin(i * 0.55) * Math.cos(i * 0.23)));
 }
 
-/** Frozen wave while Gemini works: the last shape, flattened to a low amplitude. */
-export function frozenWave(last: readonly number[] | null, n = BAR_COUNT): number[] {
-  const base = last && last.some((v) => v > 0.02) ? resample(last, n) : designWave(n);
+/** Frozen wave while Gemini works: the recording's shape, flattened to a low amplitude. */
+export function frozenWave(shape: readonly number[] | null, n = BAR_COUNT): number[] {
+  const base = shape && shape.some((v) => v > 0.02) ? resample(shape, n) : designWave(n);
   return base.map((v) => 0.06 + v * 0.18);
+}
+
+/** The finished voice note: its shape at a calm amplitude, so it reads as a recording, not a live meter. */
+export function noteWave(shape: readonly number[] | null, n = BAR_COUNT): number[] {
+  const base = shape && shape.some((v) => v > 0.02) ? resample(shape, n) : designWave(n);
+  return base.map((v) => 0.08 + v * 0.62);
 }

@@ -1,8 +1,12 @@
 import { BAR_TAIL, barHeight } from '../lib/bars';
 
-/** 46 bars, 3px wide, 4–30px tall. `live` = orange with the faded tail; otherwise frozen in faint. */
-export default function Wave({ values, live }: { values: readonly number[]; live: boolean }) {
+/**
+ * 46 bars, 3px wide, 4–30px tall (design A.2). `live`: orange, with the design's faded tail where
+ * the next sound lands; `frozen`: a recording that is no longer listening, in faint grey.
+ */
+export default function Wave({ values, tone }: { values: readonly number[]; tone: 'live' | 'frozen' }) {
   const n = values.length;
+  const live = tone === 'live';
   return (
     <div class={`wave${live ? '' : ' idle'}`} aria-hidden="true">
       {values.map((v, i) => (

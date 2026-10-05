@@ -186,6 +186,8 @@ function DefaultsStep({ current, total }: { current: number; total: number }) {
             autocomplete="off"
             placeholder={t('setup.noBudget')}
             value={budget}
+            // Sized to the text so "/ month" follows it, as in the design (mono digits are 1ch).
+            style={{ width: `${Math.max(6, budget.length + 1)}ch` }}
             onInput={(e) => setBudget(e.currentTarget.value)}
             onBlur={() => {
               const cents = parseAmount(budget);

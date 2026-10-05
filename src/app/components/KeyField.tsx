@@ -12,9 +12,10 @@ export type KeyStatus =
   | { kind: 'ok'; model: string }
   | { kind: 'error'; code: GeminiErrorCode };
 
-export function maskKey(key: string): string {
+/** "AIza••••••••••••••Qx4": first 4 + bullets + last 3 (fewer bullets where space is short). */
+export function maskKey(key: string, bullets = 14): string {
   if (key.length <= 8) return '•'.repeat(key.length);
-  return `${key.slice(0, 4)}${'•'.repeat(14)}${key.slice(-3)}`;
+  return `${key.slice(0, 4)}${'•'.repeat(bullets)}${key.slice(-3)}`;
 }
 
 /** Key text + check status; the check re-runs when the model changes. */

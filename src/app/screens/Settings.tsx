@@ -83,7 +83,7 @@ function GeminiSection() {
       <div class="kv">
         <div>{t('settings.apiKey')}</div>
         <div class="row">
-          <span class="mono key-value">{key ? maskKey(key) : t('settings.noKey')}</span>
+          <span class="mono key-value">{key ? maskKey(key, 6) : t('settings.noKey')}</span>
           <span class="pills">
             <button type="button" class="pill" aria-expanded={changing} onClick={() => setChanging(!changing)}>
               {t('common.change')}
@@ -99,7 +99,7 @@ function GeminiSection() {
         <div>
           <input
             id="set-model"
-            class="mono"
+            class="mono bare"
             type="text"
             autocomplete="off"
             autocapitalize="off"
@@ -211,6 +211,8 @@ function DefaultsSection() {
             autocomplete="off"
             placeholder={t('setup.noBudget')}
             value={budget}
+            // Sized to the text so "/ month" follows it, as in the design (mono digits are 1ch).
+            style={{ width: `${Math.max(6, budget.length + 1)}ch` }}
             onInput={(e) => setBudget(e.currentTarget.value)}
             onBlur={saveBudget}
             onKeyDown={(e) => {

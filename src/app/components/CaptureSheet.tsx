@@ -3,8 +3,9 @@
  * batch, with edit mode) | nothing parsed | error.
  */
 import { formatAmount, parseAmount } from '@shared/money';
-import { lang, t } from '../i18n';
+import { t } from '../i18n';
 import {
+  cancelEditing,
   capture,
   closeCapture,
   editAll,
@@ -21,24 +22,23 @@ import {
   type CaptureInput,
   type CaptureState,
   type Draft,
+  type ResultState,
 } from '../lib/capture';
-import { frozenWave } from '../lib/bars';
+import { frozenWave, noteWave } from '../lib/bars';
 import { formatDuration, todayLocal } from '../lib/format';
 import { categories, currency, model } from '../lib/store';
 import { navigate } from '../router';
 import { CompactFields, EntryFields, EntryReadout } from './EntryFields';
-import { IconClose, IconOk } from './Icons';
+import { IconClose, IconOk, IconStop } from './Icons';
 import Sheet from './Sheet';
 import Wave from './Wave';
-
-type ResultState = Extract<CaptureState, { kind: 'result' }>;
 
 export default function CaptureSheet() {
   const s = capture.value;
   if (s.kind === 'idle') return null;
   const focusKey = s.kind === 'recording' ? `rec-${s.gesture}` : s.kind === 'result' ? `res-${s.editing.length > 0}` : s.kind;
   return (
-    <Sheet label={t('capture.sheet')} onClose={closeCapture} focusKey={focusKey} initialFocus=".btn.primary" class="capture">
+    <Sheet label={t('capture.sheet')} onClose={closeCapture} focusKey={focusKey} class={`capture ${s.kind}`}>
       {s.kind === 'recording' ? <Recording state={s} /> : null}
       {s.kind === 'thinking' ? <Thinking input={s.input} /> : null}
       {s.kind === 'result' ? <Result state={s} /> : null}
@@ -50,14 +50,15 @@ export default function CaptureSheet() {
 
 function CloseButton() {
   return (
-    <button type="button" class="ibtn ghost sm" aria-label={t('common.cancel')} onClick={closeCapture}>
+    <button type="button" class="ibtn ghost sm" aria-label={t('common.close')} onClick={closeCapture}>
       <IconClose />
     </button>
   );
 }
 
 function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording' }> }) {
-  const hint = state.cancelArmed ? t('capture.releaseToCancel') : state.gesture === 'tap' ? t('capture.tapToStop') : t('capture.releaseToSend');
+  const tap = state.gesture === 'tap';
+  const hint = state.cancelArmed ? t('capture.releaseToCancel') : tap ? t('capture.tapToStop') : t('capture.releaseToSend');
   return (
     <>
       <div class="sheet-head">
@@ -69,38 +70,56 @@ function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording'
           {hint}
         </span>
       </div>
-      <div class="wave-wrap">
-        <Wave values={levels.value} live />
+      <div class={`wave-wrap${state.cancelArmed ? ' armed' : ''}`}>
+        <Wave values={levels.value} tone="live" />
       </div>
-      <div class={`btns${state.gesture === 'tap' ? '' : ' ghosted'}`} aria-hidden={state.gesture !== 'tap'}>
-        <button type="button" class="btn" tabIndex={state.gesture === 'tap' ? 0 : -1} onClick={() => void finishRecording(false)}>
-          {t('common.cancel')}
-        </button>
-        <button type="button" class="btn primary" tabIndex={state.gesture === 'tap' ? 0 : -1} onClick={() => void finishRecording(true)}>
-          {t('capture.stopSend')}
-        </button>
-      </div>
+      {tap ? (
+        <div class="btns">
+          <button type="button" class="btn" onClick={() => void finishRecording(false)}>
+            {t('common.cancel')}
+          </button>
+          <button type="button" class="btn primary with-icon" onClick={() => void finishRecording(true)}>
+            <IconStop />
+            {t('capture.stopSend')}
+          </button>
+        </div>
+      ) : (
+        <p class="lbl hold-hint" aria-hidden="true">
+          {state.cancelArmed ? ' ' : t('capture.slideToCancel')}
+        </p>
+      )}
     </>
   );
 }
 
 /** What the person gave us: the typed text, the transcript, or the receipt thumbnail. */
-function Source({ input, transcript, label }: { input: CaptureInput; transcript?: string; label?: boolean }) {
-  if (input.mode === 'photo') return <img class="thumb" src={input.thumbUrl} alt={t('capture.photo')} />;
-  if (input.mode === 'text') {
+function Source({ input, transcript, label, big }: { input: CaptureInput; transcript?: string; label?: boolean; big?: boolean }) {
+  if (input.mode === 'photo') {
     return (
-      <>
-        {label ? <div class="lbl you">{t('capture.youWrote')}</div> : null}
-        <p class={`quote ink${label ? ' big-quote' : ''}`}>{input.text}</p>
-      </>
+      <div class="source">
+        {label ? <div class="lbl you">{t('capture.photo')}</div> : null}
+        <img class="thumb" src={input.thumbUrl} alt={t('capture.photo')} />
+      </div>
     );
   }
-  return transcript ? <p class="quote ink">{t('capture.quote', { text: transcript })}</p> : null;
+  if (input.mode === 'text') {
+    return (
+      <div class="source">
+        {label ? <div class="lbl you">{t('capture.youWrote')}</div> : null}
+        <p class={`quote ink${big ? ' big-quote' : ''}`}>{input.text}</p>
+      </div>
+    );
+  }
+  return transcript ? (
+    <div class="source">
+      <p class="quote ink">{t('capture.quote', { text: transcript })}</p>
+    </div>
+  ) : null;
 }
 
-/** Voice keeps the design's header + wave above the result, with an honest label. */
-function VoiceHead({ input }: { input: CaptureInput }) {
-  if (input.mode !== 'voice') return null;
+/** A finished voice note keeps the design's header + wave, with an honest label (no longer live). */
+function VoiceHead({ input }: { input: CaptureInput | null }) {
+  if (input?.mode !== 'voice') return null;
   return (
     <>
       <div class="sheet-head">
@@ -108,7 +127,7 @@ function VoiceHead({ input }: { input: CaptureInput }) {
         <CloseButton />
       </div>
       <div class="wave-wrap">
-        <Wave values={frozenWave(input.wave)} live={false} />
+        <Wave values={noteWave(input.wave)} tone="frozen" />
       </div>
     </>
   );
@@ -118,7 +137,7 @@ function Thinking({ input }: { input: CaptureInput }) {
   return (
     <>
       <div class="sheet-head">
-        <span class="lbl acc state">
+        <span class="lbl acc state" role="status">
           <span class="dot pulse" />
           {input.mode === 'voice' ? t('capture.thinkingListen') : t('capture.thinkingRead')}
         </span>
@@ -126,12 +145,10 @@ function Thinking({ input }: { input: CaptureInput }) {
       </div>
       {input.mode === 'voice' ? (
         <div class="wave-wrap">
-          <Wave values={frozenWave(input.wave)} live={false} />
+          <Wave values={frozenWave(input.wave)} tone="frozen" />
         </div>
       ) : (
-        <div class="source">
-          <Source input={input} />
-        </div>
+        <Source input={input} />
       )}
       <div class="skeleton" aria-hidden="true">
         <i style={{ width: '74%' }} />
@@ -152,9 +169,7 @@ function Single({ state }: { state: ResultState }) {
   return (
     <>
       <VoiceHead input={state.input} />
-      <div class="source">
-        <Source input={state.input} transcript={state.transcript} />
-      </div>
+      <Source input={state.input} transcript={state.transcript} label />
       <div class="parsed-row">
         <span class="lbl">{t('capture.parsed')}</span>
         <span class="pill">
@@ -163,10 +178,14 @@ function Single({ state }: { state: ResultState }) {
         </span>
       </div>
       {editing ? <EntryFields draft={draft} onChange={(p) => updateDraft(draft.key, p)} /> : <EntryReadout draft={draft} today={todayLocal()} />}
-      {state.error ? <p class="err line">{t(state.error)}</p> : null}
+      {state.error ? (
+        <p class="err line" role="alert">
+          {t(state.error)}
+        </p>
+      ) : null}
       <div class="btns">
         {editing ? (
-          <button type="button" class="btn" onClick={closeCapture} disabled={state.saving}>
+          <button type="button" class="btn" onClick={cancelEditing} disabled={state.saving}>
             {t('common.cancel')}
           </button>
         ) : (
@@ -185,13 +204,11 @@ function Single({ state }: { state: ResultState }) {
 function Batch({ state }: { state: ResultState }) {
   const chosen = state.drafts.filter((d) => d.checked);
   const total = chosen.reduce((sum, d) => sum + (parseAmount(d.amount) ?? 0), 0);
-  const allEditing = state.editing.length === state.drafts.length;
+  const editing = state.editing.length > 0;
   return (
     <>
       <VoiceHead input={state.input} />
-      <div class="source">
-        <Source input={state.input} transcript={state.transcript} label />
-      </div>
+      <Source input={state.input} transcript={state.transcript} label big />
       <div class="parsed-row found">
         <span class="lbl">{t('capture.found', { count: state.drafts.length })}</span>
         <span class="pill">
@@ -210,10 +227,14 @@ function Batch({ state }: { state: ResultState }) {
           {formatAmount(total)} {currency.value}
         </span>
       </div>
-      {state.error ? <p class="err line">{t(state.error)}</p> : null}
+      {state.error ? (
+        <p class="err line" role="alert">
+          {t(state.error)}
+        </p>
+      ) : null}
       <div class="btns">
-        {allEditing ? (
-          <button type="button" class="btn" onClick={closeCapture} disabled={state.saving}>
+        {editing ? (
+          <button type="button" class="btn" onClick={cancelEditing} disabled={state.saving}>
             {t('common.cancel')}
           </button>
         ) : (
@@ -274,9 +295,7 @@ function Empty({ input, transcript, reply }: { input: CaptureInput; transcript: 
   return (
     <>
       <VoiceHead input={input} />
-      <div class="source">
-        <Source input={input} transcript={transcript} />
-      </div>
+      <Source input={input} transcript={transcript} label />
       <p class="reply">{reply || t('capture.noReply')}</p>
       <div class="btns">
         <button type="button" class="btn" onClick={typeInstead}>
@@ -315,16 +334,10 @@ function errorText(code: CaptureErrorCode): string {
 
 function Failure({ input, code }: { input: CaptureInput | null; code: CaptureErrorCode }) {
   const toSettings = code === 'invalid_key' || code === 'model_not_found';
-  // The language signal is read so the message re-renders when it changes.
-  void lang.value;
   return (
     <>
-      {input ? <VoiceHead input={input} /> : null}
-      {input && input.mode !== 'voice' ? (
-        <div class="source">
-          <Source input={input} />
-        </div>
-      ) : null}
+      <VoiceHead input={input} />
+      {input && input.mode !== 'voice' ? <Source input={input} label /> : null}
       <p class="err big-err" role="alert">
         {errorText(code)}
       </p>
