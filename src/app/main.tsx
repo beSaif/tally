@@ -1,10 +1,12 @@
 import { render } from 'preact';
 import './styles/tokens.css';
 import './styles/app.css';
+import './styles/native.css';
 import App from './app';
 import { t } from './i18n';
 import { setApiHandlers } from './lib/api';
 import { initInstall } from './lib/install';
+import { installNativeFeel } from './lib/native-feel';
 import { bootstrap, signedOut } from './lib/store';
 import { registerServiceWorker } from './lib/sw-register';
 import { showToast } from './lib/toast';
@@ -21,6 +23,7 @@ setApiHandlers({
 });
 window.addEventListener('offline', () => showToast({ text: t('toast.offline') }));
 
+installNativeFeel();
 initInstall();
 
 // The Vite dev server has no service worker (it would cache stale modules); the build registers it.

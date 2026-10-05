@@ -498,3 +498,20 @@ Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if
 - Secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, optional `INVITE_CODE` (`wrangler secret put`).
 - GitHub Actions: `ci.yml` (check, unit + worker tests, build, e2e) on push/PR; `deploy.yml` on push to `main` when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets exist: install → build → `wrangler d1 migrations apply tally --remote` → `wrangler deploy`.
 - README: one-time setup (`npm i`, `npm run vapid`, `npm run setup:cloudflare`, secrets), local dev, tests, deploy, limitations.
+
+## 13. Implementation notes and deviations (as built)
+
+Recorded after the build so the spec stays honest. Each item is deliberate.
+
+- **Voice result header** (§3.5): after Gemini answers, the sheet keeps the A.2 header and wave but reads "VOICE NOTE · 0:06" with a × and a grey wave, because orange marks only a live recording. Text results carry a "You wrote" label and photo results a "Receipt photo" label (C.2 style).
+- **Tap mode** (§3.4): the sheet covers the composer (as in A.2), so "tap the mic again" is not reachable; a "■ Stop & send" button in the sheet does it. A "↑ Slide up to cancel" hint shows in hold mode.
+- **Deltas** (§3.6): a 0% delta is shown whenever the previous period had a total for that category.
+- **Inputs** are 16px where the design draws 14px, so iOS does not zoom on focus; with the viewport locked (§9 / native feel) this is belt and braces.
+- **Notification click**: an open Tally window is routed in-app through a message instead of `client.navigate` (no reload). Notification URLs are limited to the app's own paths.
+- **App, not web page**: the viewport is locked (`maximum-scale=1`, `user-scalable=no`, `interactive-widget=resizes-content`), pinch/double-tap zoom are also blocked by script for iOS Safari, overscroll bounce and pull-to-refresh are off, UI chrome is not selectable (quotes, answers and fields are), long-press callouts are off, phone/date/address auto-detection is off, and the composer/sheets follow the on-screen keyboard through `--kb` from the visual viewport (`src/app/lib/native-feel.ts`, `styles/native.css`).
+- **Push subscribe** (§8.1): the client re-posts the subscription on every app start (and on a language change), since `last_seen_at` only moves on that call and picks the zone for budget alerts.
+- **Scheduler** (§8.4): dedup keys carry the device zone, kinds are due for the hour after their time, each run has a D1 query budget of 40, claims are released when no device accepted a message, and old `reminder_skips`/`notification_log` rows are pruned. Budget alerts are queued once per month a batch touches. Accounts keep at most 10 devices.
+- **Login throttling** (§11): per email **and** address (10 in 15 min) with a global per-email cap (100).
+- **`parseAmount`**: a single separator followed by exactly three digits is a thousands separator (`1,000` → 1 000.00); `0,500` stays 0.50.
+- **CSV export**: user-written columns are prefixed with an apostrophe when they start with `=`, `+`, `-`, `@`, tab or CR so spreadsheets never run them as formulas.
+- **Not shipped** (documented in the README): email verification, password reset, offline queueing.

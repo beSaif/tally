@@ -12,6 +12,13 @@ Design: round 01 is in [`design/index.html`](design/index.html) (hosted at
 https://tally-design.pages.dev). The app implements layout **A — Ledger** with the **I2 Receipt**
 icon. The build spec lives in [`docs/SPEC.md`](docs/SPEC.md).
 
+<p align="center">
+  <img src="docs/screenshots/home.png" width="190" alt="Home: month total, budget bar, entries grouped by day, composer" />
+  <img src="docs/screenshots/voice-confirm.png" width="190" alt="Voice note parsed by Gemini into an entry to confirm" />
+  <img src="docs/screenshots/batch.png" width="190" alt="One sentence parsed into three entries" />
+  <img src="docs/screenshots/overview.png" width="190" alt="Month overview with category bars and deltas" />
+</p>
+
 ## Features
 
 - **Ledger home**: month total with budget progress, entries grouped by day, one composer bar.
@@ -25,7 +32,7 @@ icon. The build spec lives in [`docs/SPEC.md`](docs/SPEC.md).
   alerts at 50 / 80 / 100 % of the budget, Monday summary, first-of-month report, test button,
   per-device management, notification actions ("Log now", "Skip today").
 - **Multi-user**: email + password accounts; optional invite code; sign-ups can be closed.
-- **PWA**: installable, offline shell, self-hosted fonts, no third-party scripts or analytics.
+- **PWA that feels like an app**: installable, offline shell, no pinch or double-tap zoom, no rubber-banding or pull-to-refresh, no text selection or long-press callouts on controls, composer stays above the keyboard, self-hosted fonts, no third-party scripts or analytics.
 
 ## How it works
 
