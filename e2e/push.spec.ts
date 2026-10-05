@@ -8,7 +8,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { PushPayload } from '../src/shared/api';
 import { fakePushState } from './support/fake-push';
-import { designAccount, prepare } from './support/fixtures';
+import { designAccount, PASSWORD, prepare } from './support/fixtures';
 import { decryptDelivery, PushSink } from './support/push-sink';
 
 test.use({ channel: 'chromium' });
@@ -16,6 +16,10 @@ test.use({ channel: 'chromium' });
 const sink = new PushSink();
 test.beforeAll(() => sink.start());
 test.afterAll(() => sink.stop());
+// Subscribed accounts would stay in every later cron run of the local database: remove them.
+test.afterEach(async ({ page }) => {
+  await page.request.delete('/api/auth/account', { data: { password: PASSWORD } }).catch(() => undefined);
+});
 
 interface Shown {
   title: string;

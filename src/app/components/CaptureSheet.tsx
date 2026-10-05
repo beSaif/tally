@@ -84,8 +84,9 @@ function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording'
           </button>
         </div>
       ) : (
+        // Armed, the header already says "Release to cancel"; the empty line keeps the sheet from jumping.
         <p class="lbl hold-hint" aria-hidden="true">
-          {state.cancelArmed ? ' ' : t('capture.slideToCancel')}
+          {state.cancelArmed ? '\u00a0' : t('capture.slideToCancel')}
         </p>
       )}
     </>
