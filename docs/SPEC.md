@@ -393,7 +393,7 @@ Response schema (OpenAPI subset, `responseSchema`):
     "required":["amount","currency","description","category","occurred_at","confidence"],
     "propertyOrdering":["amount","currency","description","category","occurred_at","note","confidence"]}},
   "reply":{"type":"string","nullable":true}},
- "required":["transcript","entries"]}
+ "required":["transcript","entries"],"propertyOrdering":["transcript","entries","reply"]}
 ```
 
 ### 7.5 Ask your data
