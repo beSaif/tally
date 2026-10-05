@@ -118,6 +118,20 @@ describe('budget alerts', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('keeps the alert for later when push is not configured yet', async () => {
+    const { userId } = await budgetUser();
+    await addEntries(userId, [{ amount_cents: 120_000, occurred_at: '2026-10-14T09:00' }]);
+    const calls = mockPushService(201);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await runBudgetAlerts({ ...env, VAPID_SUBJECT: '' }, userId, '2026-10-14T09:00', NOW)).toBe(0);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('not configured'));
+    expect(await logKeys(userId, 'budget')).toEqual([]);
+
+    expect(await runBudgetAlerts(env, userId, '2026-10-14T09:00', NOW)).toBe(1);
+    expect(calls).toHaveLength(1);
+  });
+
   it('reads "this month" in the zone of the most recently seen device', async () => {
     const userId = await seedUser({ budget_cents: 200_000 });
     const zurich = await makeSubscriber(endpoint('zurich'));

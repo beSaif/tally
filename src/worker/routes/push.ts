@@ -70,10 +70,9 @@ pushRoutes.post('/subscribe', async (c) => {
 
 pushRoutes.patch('/subscriptions/:id', async (c) => {
   const body = await readJson(c, pushPatchSchema);
-  const res = await c.env.DB.prepare(
-    'UPDATE push_subscriptions SET lang = COALESCE(?, lang), tz = COALESCE(?, tz), last_seen_at = ? WHERE id = ? AND user_id = ?',
-  )
-    .bind(body.lang ?? null, body.tz ?? null, nowMs(), c.req.param('id'), c.var.user.id)
+  // last_seen_at stays: any of the user's sessions may patch a device, so this is no sign of life.
+  const res = await c.env.DB.prepare('UPDATE push_subscriptions SET lang = COALESCE(?, lang), tz = COALESCE(?, tz) WHERE id = ? AND user_id = ?')
+    .bind(body.lang ?? null, body.tz ?? null, c.req.param('id'), c.var.user.id)
     .run();
   if (res.meta.changes === 0) throw notFound('No such subscription');
   return c.body(null, 204);

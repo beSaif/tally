@@ -160,6 +160,13 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   const crossed = BUDGET_THRESHOLDS.filter((t) => total * 100 >= t * budget);
   if (crossed.length === 0) return 0;
 
+  // Check the keys before logging, or an unconfigured server would swallow the alert for good.
+  const vapid = await vapidFromEnv(env);
+  if (!vapid) {
+    console.error('Push is not configured (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT); budget alert not sent');
+    return 0;
+  }
+
   const sentAt = nowMs();
   const inserted = await env.DB.batch(
     crossed.map((t) =>
@@ -171,11 +178,16 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   const threshold = Math.max(...fresh);
 
   const daysLeft = daysLeftInMonth(today);
-  return sendToSubscriptions(env, subs, (lang) => ({
-    kind: 'budget',
-    ...budgetText(lang, { threshold, spentCents: total, budgetCents: budget, currency: settings.currency, daysLeft }),
-    url: '/overview?p=month',
-    tag: 'budget',
-    lang,
-  }));
+  return sendToSubscriptions(
+    env,
+    subs,
+    (lang) => ({
+      kind: 'budget',
+      ...budgetText(lang, { threshold, spentCents: total, budgetCents: budget, currency: settings.currency, daysLeft }),
+      url: '/overview?p=month',
+      tag: 'budget',
+      lang,
+    }),
+    vapid,
+  );
 }
