@@ -79,7 +79,7 @@ Useful scripts:
 | --- | --- |
 | `npm run check` | Typecheck the app and the Worker |
 | `npm test` | Unit tests (node) + Worker tests (inside workerd with D1) |
-| `npm run e2e` | Playwright end-to-end tests against a built app with Gemini mocked |
+| `npm run e2e` | Playwright end-to-end tests: builds, migrates the local D1, starts `wrangler dev` on :8787 (creating `.dev.vars` if needed) and drives the real app with only Gemini and the browser push API mocked. Stop any `wrangler dev` already on :8787 first, or Playwright reuses it. |
 | `npm run icons` | Re-render the pixel icon to `public/icons/` |
 | `npm run types` | Regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` |
 
