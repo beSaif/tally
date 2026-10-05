@@ -103,7 +103,8 @@ interface SessionJoinRow {
 /**
  * Resolves a cookie token to its user. Expired sessions are deleted. Sessions with fewer than
  * SESSION_RENEW_BELOW_DAYS left are extended (sliding expiry); the new expiry is returned so the
- * caller can refresh the cookie.
+ * caller can refresh the cookie. A renewal costs a D1 write and a Set-Cookie, so it only happens
+ * when it buys at least a day: at most one write per session and day, whatever the two constants.
  */
 export async function resolveSession(env: Env, token: string): Promise<{ user: SessionUser; renewedExpiresAt: number | null } | null> {
   if (!/^[A-Za-z0-9_-]{32,64}$/.test(token)) return null;
@@ -121,8 +122,9 @@ export async function resolveSession(env: Env, token: string): Promise<{ user: S
     return null;
   }
   let renewedExpiresAt: number | null = null;
-  if (row.expires_at - now < SESSION_RENEW_BELOW_DAYS * DAY_MS) {
-    renewedExpiresAt = now + SESSION_DAYS * DAY_MS;
+  const renewal = now + SESSION_DAYS * DAY_MS;
+  if (row.expires_at - now < SESSION_RENEW_BELOW_DAYS * DAY_MS && renewal - row.expires_at >= DAY_MS) {
+    renewedExpiresAt = renewal;
     await env.DB.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').bind(renewedExpiresAt, id).run();
   }
   return { user: { id: row.id, email: row.email, created_at: row.created_at }, renewedExpiresAt };
@@ -180,26 +182,40 @@ export const sameOriginGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
 };
 
 // ---- login throttling ----
+// Counting failures per email alone would let anyone lock the owner out with ten wrong
+// passwords. The per-address limit stops one guesser; the per-email limit, far higher, still
+// bounds a guess spread over many addresses.
 const ATTEMPT_WINDOW_MS = 15 * 60_000;
-const ATTEMPT_LIMIT = 10;
+export const ATTEMPT_LIMIT_PER_ADDRESS = 10;
+export const ATTEMPT_LIMIT_PER_EMAIL = 100;
 
-export async function assertNotThrottled(env: Env, email: string): Promise<void> {
-  const since = nowMs() - ATTEMPT_WINDOW_MS;
-  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_attempts WHERE email = ? AND attempted_at > ?')
-    .bind(email, since)
-    .first<{ n: number }>();
-  if ((row?.n ?? 0) >= ATTEMPT_LIMIT) throw new ApiError('rate_limited', 'Too many attempts. Try again later.');
+/** The caller's address as Cloudflare reports it; '' when there is none (local tools, tests). */
+export function clientIp(c: Context<AppEnv>): string {
+  return c.req.header('CF-Connecting-IP') ?? '';
 }
 
-export async function recordFailedAttempt(env: Env, email: string): Promise<void> {
+export async function assertNotThrottled(env: Env, email: string, ip: string): Promise<void> {
+  const since = nowMs() - ATTEMPT_WINDOW_MS;
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS for_email, COALESCE(SUM(ip = ?), 0) AS from_ip FROM login_attempts WHERE email = ? AND attempted_at > ?',
+  )
+    .bind(ip, email, since)
+    .first<{ for_email: number; from_ip: number }>();
+  if ((row?.from_ip ?? 0) >= ATTEMPT_LIMIT_PER_ADDRESS || (row?.for_email ?? 0) >= ATTEMPT_LIMIT_PER_EMAIL) {
+    throw new ApiError('rate_limited', 'Too many attempts. Try again later.');
+  }
+}
+
+export async function recordFailedAttempt(env: Env, email: string, ip: string): Promise<void> {
   const now = nowMs();
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO login_attempts (email, attempted_at) VALUES (?, ?)').bind(email, now),
+    env.DB.prepare('INSERT INTO login_attempts (email, ip, attempted_at) VALUES (?, ?, ?)').bind(email, ip, now),
     // Keep the table small: anything older than the window is irrelevant.
     env.DB.prepare('DELETE FROM login_attempts WHERE attempted_at < ?').bind(now - ATTEMPT_WINDOW_MS),
   ]);
 }
 
-export async function clearAttempts(env: Env, email: string): Promise<void> {
-  await env.DB.prepare('DELETE FROM login_attempts WHERE email = ?').bind(email).run();
+/** After a successful login from this address. Failures from other addresses still count. */
+export async function clearAttempts(env: Env, email: string, ip: string): Promise<void> {
+  await env.DB.prepare('DELETE FROM login_attempts WHERE email = ? AND ip = ?').bind(email, ip).run();
 }

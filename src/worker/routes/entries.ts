@@ -28,6 +28,20 @@ function queueBudgetAlerts(c: Context<AppEnv>, occurredAt: string): void {
   }
 }
 
+/**
+ * The latest occurred_at of each month a batch touches. An alert is about one month's total, so a
+ * batch that mixes this month with a future-dated entry must still check this month.
+ */
+function latestPerMonth(occurredAts: readonly string[]): string[] {
+  const byMonth = new Map<string, string>();
+  for (const at of occurredAts) {
+    const month = at.slice(0, 7);
+    const latest = byMonth.get(month);
+    if (latest === undefined || at > latest) byMonth.set(month, at);
+  }
+  return [...byMonth.values()];
+}
+
 export const entriesRoutes = new Hono<AppEnv>();
 
 entriesRoutes.get('/', requireUser, async (c) => {
@@ -74,7 +88,7 @@ entriesRoutes.post('/', requireUser, async (c) => {
     return row ? [entryFromRow(row)] : [];
   });
 
-  queueBudgetAlerts(c, input.reduce((latest, e) => (e.occurred_at > latest ? e.occurred_at : latest), ''));
+  for (const occurredAt of latestPerMonth(input.map((e) => e.occurred_at))) queueBudgetAlerts(c, occurredAt);
   return c.json({ entries }, 201);
 });
 

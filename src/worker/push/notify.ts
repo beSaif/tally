@@ -5,11 +5,12 @@
  */
 import type { PushKind, PushPayload, ResolvedLanguage } from '@shared/api';
 import { BUDGET_THRESHOLDS } from '@shared/constants';
-import { addDays, daysLeftInMonth, monthRange, zonedParts } from '@shared/dates';
+import { daysLeftInMonth, monthRange, zonedParts } from '@shared/dates';
 import type { Env } from '../env';
 import { loadSettingsRow, nowMs } from '../lib/db';
+import { occurredBounds } from '../lib/range';
 import { budgetText } from './strings';
-import { sendWebPush, vapidFromEnv, type SendOptions, type SendResult, type Vapid } from './webpush';
+import { sendWebPush, vapidFromEnv, type SendOptions, type SendResult, type Vapid, type VapidCache } from './webpush';
 
 export interface SubscriptionRow {
   id: string;
@@ -54,33 +55,62 @@ export async function loadSubscriptions(env: Env, userId: string): Promise<Subsc
   return results;
 }
 
+/** The kinds notification_log dedups; test notifications are never logged. */
+export type LoggedKind = Exclude<PushKind, 'test'>;
+
 /**
  * Records that a notification is going out. Returns false when it already went out for this
  * period (or another run is sending it right now), in which case the caller must not send.
  */
-export async function claimNotification(env: Env, userId: string, kind: Exclude<PushKind, 'test'>, periodKey: string): Promise<boolean> {
+export async function claimNotification(env: Env, userId: string, kind: LoggedKind, periodKey: string, sentAt: number = nowMs()): Promise<boolean> {
   const res = await env.DB.prepare('INSERT OR IGNORE INTO notification_log (user_id, kind, period_key, sent_at) VALUES (?, ?, ?, ?)')
-    .bind(userId, kind, periodKey, nowMs())
+    .bind(userId, kind, periodKey, sentAt)
     .run();
   return res.meta.changes > 0;
 }
 
 /**
+ * Gives a claim back after a delivery that reached nobody but could still reach someone (see
+ * worthRetrying), so a later attempt sends it instead of the period passing in silence.
+ */
+export async function releaseNotification(env: Env, userId: string, kind: LoggedKind, periodKey: string): Promise<void> {
+  await env.DB.prepare('DELETE FROM notification_log WHERE user_id = ? AND kind = ? AND period_key = ?').bind(userId, kind, periodKey).run();
+}
+
+/** What became of one message to a set of devices. */
+export interface Delivery {
+  /** Devices that accepted it. */
+  sent: number;
+  /** Targeted devices still subscribed after the bookkeeping: neither gone nor dropped. */
+  kept: number;
+}
+
+/**
+ * Nobody accepted the message, yet a device that might later is still subscribed: a transient
+ * failure, worth another try. When every device is gone, a retry would reach no one.
+ */
+export const worthRetrying = (delivery: Delivery): boolean => delivery.sent === 0 && delivery.kept > 0;
+
+const idList = (subs: readonly SubscriptionRow[]): string => JSON.stringify(subs.map((s) => s.id));
+
+/**
  * Sends a payload, localised per device, to each subscription and records the outcome:
  * success resets the failure count, 404/410 deletes the subscription, any other failure counts
- * towards MAX_FAILURES consecutive failures. Returns how many devices accepted the message.
+ * towards MAX_FAILURES consecutive failures. Pass the run's `cache` so VAPID tokens are signed
+ * once per push service.
  */
 export async function sendToSubscriptions(
   env: Env,
   subs: readonly SubscriptionRow[],
   payloadFor: (lang: ResolvedLanguage) => PushPayload,
   vapid?: Vapid,
-): Promise<number> {
-  if (subs.length === 0) return 0;
+  cache: VapidCache = new Map(),
+): Promise<Delivery> {
+  if (subs.length === 0) return { sent: 0, kept: 0 };
   const keys = vapid ?? (await vapidFromEnv(env));
   if (!keys) {
     console.error('Push is not configured (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT); nothing sent');
-    return 0;
+    return { sent: 0, kept: subs.length };
   }
   const payloads = new Map<ResolvedLanguage, PushPayload>();
   const payloadIn = (lang: ResolvedLanguage): PushPayload => {
@@ -93,7 +123,7 @@ export async function sendToSubscriptions(
     subs.map(async (sub): Promise<SendResult> => {
       const payload = payloadIn(sub.lang === 'fr' ? 'fr' : 'en');
       try {
-        return await sendWebPush(sub, payload, keys, deliveryOptions(payload.kind));
+        return await sendWebPush(sub, payload, keys, deliveryOptions(payload.kind), cache);
       } catch (err) {
         // Malformed keys or a network error: count it like any other failed delivery.
         console.error(`Push delivery to subscription ${sub.id} failed`, err);
@@ -102,24 +132,34 @@ export async function sendToSubscriptions(
     }),
   );
 
-  const now = nowMs();
-  const writes: D1PreparedStatement[] = [];
-  let sent = 0;
+  const accepted: SubscriptionRow[] = [];
+  const gone: SubscriptionRow[] = [];
+  const failed: SubscriptionRow[] = [];
   results.forEach((result, i) => {
     const sub = subs[i];
-    if (!sub) return;
-    if (result.ok) {
-      sent++;
-      writes.push(env.DB.prepare('UPDATE push_subscriptions SET failures = 0, last_seen_at = ? WHERE id = ?').bind(now, sub.id));
-    } else if (result.gone) {
-      writes.push(env.DB.prepare('DELETE FROM push_subscriptions WHERE id = ?').bind(sub.id));
-    } else {
-      writes.push(env.DB.prepare('UPDATE push_subscriptions SET failures = failures + 1 WHERE id = ?').bind(sub.id));
-      writes.push(env.DB.prepare('DELETE FROM push_subscriptions WHERE id = ? AND failures >= ?').bind(sub.id, MAX_FAILURES));
-    }
+    if (sub) (result.ok ? accepted : result.gone ? gone : failed).push(sub);
   });
-  if (writes.length) await env.DB.batch(writes);
-  return sent;
+
+  // One statement per outcome however many devices: a cron run has a D1 query budget. An
+  // accepted message is no sign anyone uses the device, so last_seen_at stays (only /subscribe
+  // moves it), and a device already at zero failures needs no write at all.
+  const writes: D1PreparedStatement[] = [];
+  const recovered = accepted.filter((s) => s.failures > 0);
+  if (recovered.length) {
+    writes.push(env.DB.prepare('UPDATE push_subscriptions SET failures = 0 WHERE id IN (SELECT value FROM json_each(?))').bind(idList(recovered)));
+  }
+  if (gone.length) writes.push(env.DB.prepare('DELETE FROM push_subscriptions WHERE id IN (SELECT value FROM json_each(?))').bind(idList(gone)));
+  let dropAt = -1;
+  if (failed.length) {
+    writes.push(env.DB.prepare('UPDATE push_subscriptions SET failures = failures + 1 WHERE id IN (SELECT value FROM json_each(?))').bind(idList(failed)));
+    dropAt = writes.length;
+    writes.push(
+      env.DB.prepare('DELETE FROM push_subscriptions WHERE failures >= ? AND id IN (SELECT value FROM json_each(?))').bind(MAX_FAILURES, idList(failed)),
+    );
+  }
+  const written = writes.length ? await env.DB.batch(writes) : [];
+  const dropped = dropAt >= 0 ? (written[dropAt]?.meta.changes ?? 0) : 0;
+  return { sent: accepted.length, kept: subs.length - gone.length - dropped };
 }
 
 /**
@@ -152,9 +192,8 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   const month = today.slice(0, 7);
   if (occurredAt.slice(0, 7) !== month) return 0;
 
-  const range = monthRange(today);
-  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?')
-    .bind(userId, range.from, addDays(range.to, 1))
+  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?')
+    .bind(userId, ...occurredBounds(monthRange(today)))
     .first<{ total: number }>();
   const total = row?.total ?? 0;
   const crossed = BUDGET_THRESHOLDS.filter((t) => total * 100 >= t * budget);
@@ -168,9 +207,10 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   }
 
   const sentAt = nowMs();
+  const keyOf = (threshold: number) => `${month}:${threshold}`;
   const inserted = await env.DB.batch(
     crossed.map((t) =>
-      env.DB.prepare('INSERT OR IGNORE INTO notification_log (user_id, kind, period_key, sent_at) VALUES (?, ?, ?, ?)').bind(userId, 'budget', `${month}:${t}`, sentAt),
+      env.DB.prepare('INSERT OR IGNORE INTO notification_log (user_id, kind, period_key, sent_at) VALUES (?, ?, ?, ?)').bind(userId, 'budget', keyOf(t), sentAt),
     ),
   );
   const fresh = crossed.filter((_, i) => (inserted[i]?.meta.changes ?? 0) > 0);
@@ -178,7 +218,7 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   const threshold = Math.max(...fresh);
 
   const daysLeft = daysLeftInMonth(today);
-  return sendToSubscriptions(
+  const delivery = await sendToSubscriptions(
     env,
     subs,
     (lang) => ({
@@ -190,4 +230,7 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
     }),
     vapid,
   );
+  // Undo this call's claims so the next entry write tries again.
+  if (worthRetrying(delivery)) await Promise.all(fresh.map((t) => releaseNotification(env, userId, 'budget', keyOf(t))));
+  return delivery.sent;
 }

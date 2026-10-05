@@ -146,6 +146,24 @@ export function floorToSlot(hhmm: string, slotMinutes: number): string {
   return `${pad(h ?? 0)}:${pad(m)}`;
 }
 
+const minutesOfDay = (hhmm: string): number => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return (h ?? NaN) * 60 + (m ?? NaN);
+};
+
+/**
+ * The day on which a daily window opened, when the wall-clock time `now` falls inside it: the
+ * window opens at `at` ('HH:MM', never earlier) and lasts `windowMinutes`. A window that opens late
+ * in the evening runs past midnight and still answers the evening's day. Null outside the window,
+ * or for a malformed time.
+ */
+export function dueDay(now: { day: string; hhmm: string }, at: string, windowMinutes: number): string | null {
+  const elapsed = minutesOfDay(now.hhmm) - minutesOfDay(at);
+  const sinceOpen = elapsed < 0 ? elapsed + 24 * 60 : elapsed;
+  if (!(sinceOpen < windowMinutes)) return null; // also NaN
+  return elapsed < 0 ? addDays(now.day, -1) : now.day;
+}
+
 export function isValidDay(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const { y, m, d } = parseDay(s);

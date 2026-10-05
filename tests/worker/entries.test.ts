@@ -361,7 +361,7 @@ async function direct(s: Session, method: string, path: string, body?: unknown, 
 }
 
 describe('budget alert hook', () => {
-  it('runs once per batch, inside waitUntil, with the latest occurred_at', async () => {
+  it('runs once for a batch within one month, inside waitUntil, with its latest occurred_at', async () => {
     const s = await signup();
     let finished = false;
     budgetAlerts.mockImplementationOnce(async () => {
@@ -375,6 +375,25 @@ describe('budget alert hook', () => {
     expect(budgetAlerts).toHaveBeenCalledTimes(1);
     expect(budgetAlerts).toHaveBeenCalledWith(expect.objectContaining({ DB: expect.anything() }), s.userId, '2026-10-05T09:00');
     expect(finished).toBe(true); // waitOnExecutionContext only waits for promises handed to waitUntil
+  });
+
+  it('runs once per month a batch touches, so a future-dated entry cannot hide this month', async () => {
+    const s = await signup();
+    const res = await direct(s, 'POST', '/api/entries', {
+      entries: [
+        entry({ occurred_at: '2026-10-05T09:00' }),
+        entry({ occurred_at: '2026-11-02T10:00' }), // planned for next month
+        entry({ occurred_at: '2026-10-01T08:00' }),
+        entry({ occurred_at: '2026-09-30T23:59' }),
+        entry({ occurred_at: '2026-11-01T00:00' }),
+      ],
+    });
+    expect(res.status).toBe(201);
+    expect(budgetAlerts.mock.calls.map(([, userId, occurredAt]) => [userId, occurredAt])).toEqual([
+      [s.userId, '2026-10-05T09:00'],
+      [s.userId, '2026-11-02T10:00'],
+      [s.userId, '2026-09-30T23:59'],
+    ]);
   });
 
   it('runs after a patch with the entry’s new time, but not after a delete or a failed write', async () => {

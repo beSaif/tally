@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, daysLeftInMonth, floorToSlot, isoWeek, isoWeekKey, monthRange, previousRange,
+  addDays, addMonths, daysLeftInMonth, dueDay, floorToSlot, isoWeek, isoWeekKey, monthRange, previousRange,
   shiftAnchor, weekRange, yearRange, zonedParts, isValidDay, isValidMinute, daysBetween,
 } from '@shared/dates';
 
@@ -46,6 +46,32 @@ describe('calendar helpers', () => {
     expect(isValidDay('2026-02-30')).toBe(false);
     expect(isValidMinute('2026-10-05T18:05')).toBe(true);
     expect(isValidMinute('2026-10-05T24:00')).toBe(false);
+  });
+  it('due windows: from the minute, for the window, never early', () => {
+    const at = (day: string, hhmm: string) => ({ day, hhmm });
+    expect(dueDay(at('2026-10-05', '20:29'), '20:30', 60)).toBeNull();
+    expect(dueDay(at('2026-10-05', '20:30'), '20:30', 60)).toBe('2026-10-05');
+    expect(dueDay(at('2026-10-05', '21:29'), '20:30', 60)).toBe('2026-10-05');
+    expect(dueDay(at('2026-10-05', '21:30'), '20:30', 60)).toBeNull();
+    // A minute that is not on the cron's quarter hours is served by the next run, not the one before.
+    expect(dueDay(at('2026-10-05', '20:30'), '20:44', 60)).toBeNull();
+    expect(dueDay(at('2026-10-05', '20:45'), '20:44', 60)).toBe('2026-10-05');
+    expect(dueDay(at('2026-10-05', '09:14'), '09:00', 15)).toBe('2026-10-05');
+    expect(dueDay(at('2026-10-05', '09:15'), '09:00', 15)).toBeNull();
+  });
+  it('due windows run past midnight for the evening’s day', () => {
+    const at = (day: string, hhmm: string) => ({ day, hhmm });
+    expect(dueDay(at('2026-10-05', '23:45'), '23:50', 60)).toBeNull();
+    expect(dueDay(at('2026-10-05', '23:50'), '23:50', 60)).toBe('2026-10-05');
+    expect(dueDay(at('2026-10-06', '00:00'), '23:50', 60)).toBe('2026-10-05');
+    expect(dueDay(at('2026-11-01', '00:49'), '23:50', 60)).toBe('2026-10-31');
+    expect(dueDay(at('2026-10-06', '00:50'), '23:50', 60)).toBeNull();
+    expect(dueDay(at('2026-10-06', '00:10'), '00:00', 60)).toBe('2026-10-06');
+  });
+  it('due windows ignore malformed times', () => {
+    expect(dueDay({ day: '2026-10-05', hhmm: '20:30' }, 'soon', 60)).toBeNull();
+    expect(dueDay({ day: '2026-10-05', hhmm: '20:30' }, '', 60)).toBeNull();
+    expect(dueDay({ day: '2026-10-05', hhmm: '' }, '20:30', 60)).toBeNull();
   });
   it('zoned parts', () => {
     const p = zonedParts(new Date('2026-10-05T18:30:00Z'), 'Europe/Zurich');
