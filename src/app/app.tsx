@@ -4,6 +4,7 @@ import { lang } from './i18n';
 import { gate, type Screen } from './lib/gate';
 import { resyncPush, shareLanguageWithWorker } from './lib/push';
 import { geminiKey, refreshBootstrap, sessionState, settings } from './lib/store';
+import { onAppVisible } from './lib/visible';
 import { navigate, route } from './router';
 import ToastHost from './components/ToastHost';
 import AuthScreen from './screens/Auth';
@@ -12,24 +13,12 @@ import Overview from './screens/Overview';
 import Settings from './screens/Settings';
 import Setup from './screens/Setup';
 
-const REFRESH_GAP_MS = 5000;
-
 export default function App() {
   const state = sessionState.value;
   const language = lang.value;
 
   // Settings may change on another device: refresh them when the app comes back to the front.
-  // performance.now(): a monotonic clock, unaffected by the device changing its time.
-  useEffect(() => {
-    let last = performance.now();
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible' || performance.now() - last < REFRESH_GAP_MS) return;
-      last = performance.now();
-      void refreshBootstrap();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
+  useEffect(() => onAppVisible(() => void refreshBootstrap()), []);
 
   // Keep this device's push subscription in the right language / time zone (spec §8.1).
   useEffect(() => {

@@ -4,6 +4,7 @@
  * the e2e run: the worker script is served by the Worker and cannot be swapped mid-test).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_VISIBLE_GAP_MS } from '@app/lib/visible';
 
 type Listener = (event: unknown) => void;
 
@@ -67,6 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -111,11 +113,18 @@ describe('registerServiceWorker', () => {
     expect(toast.value?.text).toBe('Update ready');
   });
 
-  it('checks for updates when the app comes back to the front', async () => {
+  it('checks for updates when the app comes back to the front, not right after registering', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
     const { registerServiceWorker } = await load();
     registerServiceWorker();
     await flush();
+    // Registering has just fetched the worker script.
     doc.dispatch('visibilitychange');
+    expect(container.registration.update).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(APP_VISIBLE_GAP_MS);
+    // A shown tab fires both events: one check.
+    doc.dispatch('visibilitychange');
+    (window as unknown as FakeTarget).dispatch('focus');
     expect(container.registration.update).toHaveBeenCalledOnce();
   });
 
