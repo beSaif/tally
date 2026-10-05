@@ -12,7 +12,8 @@ const te = new TextEncoder();
 const td = new TextDecoder();
 const ECDH_P256 = { name: 'ECDH', namedCurve: 'P-256' };
 
-export const utf8 = (s: string): Uint8Array<ArrayBuffer> => te.encode(s);
+// The copy narrows workers-types' Uint8Array<ArrayBufferLike> to the ArrayBuffer-backed kind.
+export const utf8 = (s: string): Uint8Array<ArrayBuffer> => new Uint8Array(te.encode(s));
 
 export function concat(...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
