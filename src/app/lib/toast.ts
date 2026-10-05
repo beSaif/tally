@@ -1,6 +1,6 @@
 /**
- * One toast at a time (spec §3.9). A sticky toast (e.g. "Update ready") comes back after a
- * transient one replaces it.
+ * One toast at a time (spec §3.9). A sticky toast (e.g. "Update ready") that a newer toast covers
+ * comes back once that one goes, so none is ever lost.
  */
 import { signal } from '@preact/signals';
 
@@ -25,12 +25,14 @@ export const toast = signal<Toast | null>(null);
 
 let nextId = 1;
 let timer: ReturnType<typeof setTimeout> | undefined;
-let parked: Toast | null = null;
+/** Sticky toasts covered by a newer toast, the most recently covered last. */
+let parked: Toast[] = [];
 
 export function showToast(input: ToastInput): number {
   clearTimeout(timer);
   const current = toast.value;
-  if (current?.sticky && !input.sticky) parked = current;
+  // A transient toast is simply replaced; a sticky one waits underneath.
+  if (current?.sticky) parked.push(current);
   const item: Toast = {
     id: nextId++,
     text: input.text,
@@ -43,18 +45,14 @@ export function showToast(input: ToastInput): number {
   return item.id;
 }
 
-/** Hides the toast with this id (or whatever is shown); a parked sticky toast returns. */
+/** Hides the toast with this id (or whatever is shown); the sticky toast it covered returns. */
 export function dismissToast(id?: number): void {
   const current = toast.value;
   if (!current || (id !== undefined && current.id !== id)) {
-    if (parked && id !== undefined && parked.id === id) parked = null;
+    // Not on screen: if it is waiting underneath, it should not come back.
+    if (id !== undefined) parked = parked.filter((p) => p.id !== id);
     return;
   }
   clearTimeout(timer);
-  if (current.sticky) {
-    toast.value = null;
-    return;
-  }
-  toast.value = parked;
-  parked = null;
+  toast.value = parked.pop() ?? null;
 }
