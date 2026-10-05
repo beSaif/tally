@@ -117,11 +117,12 @@ export async function startRecording(gesture: Gesture = 'pending'): Promise<void
       if (history.length < MAX_HISTORY) history.push(loudness(l));
     });
   } catch (err) {
+    // Cancelled while the permission prompt was up: finishRecording already let go of `rec`.
     if (recorder !== rec) return;
     recorder = null;
     const name = err instanceof Error || err instanceof DOMException ? err.name : '';
-    // AbortError: cancelled while the permission prompt was up; nothing to report.
-    if (name === 'AbortError') return;
+    // Anything else is a real failure, AbortError included (the device could not be opened). The
+    // sheet must leave "recording": with no recorder left, nothing else could close it.
     capture.value = { kind: 'error', input: null, code: name === 'NotAllowedError' || name === 'SecurityError' ? 'micDenied' : 'mic' };
     return;
   }
