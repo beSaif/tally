@@ -1,0 +1,44 @@
+/* App, not web page: see src/app/lib/native-feel.ts for the script half. */
+html {
+  touch-action: pan-x pan-y; /* no pinch or double-tap zoom where the browser honours it */
+  overscroll-behavior: none; /* no rubber band, no pull-to-refresh */
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none; /* no long-press preview sheet on iOS */
+}
+/* People may still copy what matters: what they typed or said, Gemini's answer, and form fields. */
+input,
+textarea,
+[contenteditable='true'],
+.quote,
+.answer,
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+button,
+[role='button'],
+a,
+.pill,
+.ibtn,
+.tabs button {
+  touch-action: manipulation; /* kills the double-tap delay and zoom on controls */
+}
+img,
+svg {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+/* Fixed chrome rides above the on-screen keyboard on iOS (--kb is 0 when it is closed). */
+.composer,
+.sheet {
+  bottom: var(--kb, 0px);
+}
+.toast {
+  margin-bottom: var(--kb, 0px);
+}

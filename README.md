@@ -32,7 +32,7 @@ icon. The build spec lives in [`docs/SPEC.md`](docs/SPEC.md).
   alerts at 50 / 80 / 100 % of the budget, Monday summary, first-of-month report, test button,
   per-device management, notification actions ("Log now", "Skip today").
 - **Multi-user**: email + password accounts; optional invite code; sign-ups can be closed.
-- **PWA**: installable, offline shell, self-hosted fonts, no third-party scripts or analytics.
+- **PWA that feels like an app**: installable, offline shell, no pinch or double-tap zoom, no rubber-banding or pull-to-refresh, no text selection or long-press callouts on controls, composer stays above the keyboard, self-hosted fonts, no third-party scripts or analytics.
 
 ## How it works
 
