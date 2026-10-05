@@ -20,6 +20,9 @@
     }
   ],
   "triggers": { "crons": ["*/15 * * * *"] },
+  // Custom domain on a zone in the same account; wrangler deploy creates the DNS record and certificate.
+  // The workers.dev address keeps working alongside it.
+  "routes": [{ "pattern": "tally.codesaif.dev", "custom_domain": true }],
   "vars": { "SIGNUPS_ENABLED": "true" },
   "observability": { "enabled": true }
 }

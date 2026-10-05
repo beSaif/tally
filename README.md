@@ -97,7 +97,7 @@ Everything fits in Cloudflare's free tier (Workers, D1, cron triggers).
    `https://tally.<your-subdomain>.workers.dev` and privacy policy `https://tally.<your-subdomain>.workers.dev/privacy`,
    which Google requires to publish). Then create an OAuth client of type **Web application** with
    `https://tally.<your-subdomain>.workers.dev/api/auth/google/callback` among its authorized redirect
-   URIs (add the two `localhost` ones from "Local development" too).
+   URIs (add the two `localhost` ones from "Local development" too, and the custom domain's if you use one).
 4. Secrets (once):
    ```sh
    node scripts/vapid.mjs --print          # generate a production VAPID pair
@@ -108,6 +108,9 @@ Everything fits in Cloudflare's free tier (Workers, D1, cron triggers).
    npx wrangler secret put GOOGLE_CLIENT_SECRET
    ```
 5. `npm run deploy` — builds, applies migrations remotely, deploys to `tally.<your-subdomain>.workers.dev`.
+   `routes` in `wrangler.jsonc` also attaches the custom domain `tally.codesaif.dev` (a zone in the same
+   Cloudflare account); change or remove that entry for your own deployment. The callback of every
+   address you serve the app from must be among the OAuth client's redirect URIs.
 
 **GitHub Actions**: `.github/workflows/deploy.yml` deploys on every push to `main` once the
 repository secrets `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers", plus D1 edit) and
