@@ -36,9 +36,20 @@ async function allowNotifications(context: BrowserContext, origin: string): Prom
   await context.grantPermissions(['notifications'], { origin });
 }
 
-/** Hands a push message to the page's service worker, as a push service would. */
+/**
+ * Hands a push message to the page's service worker, as a push service would. The DevTools command
+ * is fire-and-forget and only reaches an activated worker, so this waits for activation and sends
+ * again if nothing shows up (the same tag replaces, never duplicates).
+ */
 async function deliverPush(page: Page, payload: PushPayload): Promise<void> {
-  const scope = await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+  const scope = await page.evaluate(async () => {
+    const reg = await navigator.serviceWorker.ready;
+    const worker = reg.active;
+    if (worker && worker.state !== 'activated') {
+      await new Promise<void>((resolve) => worker.addEventListener('statechange', () => worker.state === 'activated' && resolve()));
+    }
+    return reg.scope;
+  });
   const cdp = await page.context().newCDPSession(page);
   const registrations: Array<{ registrationId: string; scopeURL: string }> = [];
   cdp.on('ServiceWorker.workerRegistrationUpdated', (e: { registrations: Array<{ registrationId: string; scopeURL: string; isDeleted: boolean }> }) =>
@@ -46,9 +57,20 @@ async function deliverPush(page: Page, payload: PushPayload): Promise<void> {
   );
   await cdp.send('ServiceWorker.enable');
   await expect.poll(() => registrations.some((r) => r.scopeURL === scope)).toBe(true);
-  const reg = registrations.find((r) => r.scopeURL === scope);
-  await cdp.send('ServiceWorker.deliverPushMessage', { origin: new URL(scope).origin, registrationId: reg?.registrationId ?? '', data: JSON.stringify(payload) });
+  const registrationId = registrations.find((r) => r.scopeURL === scope)?.registrationId ?? '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await cdp.send('ServiceWorker.deliverPushMessage', { origin: new URL(scope).origin, registrationId, data: JSON.stringify(payload) });
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      if ((await shown(page, payload.tag)).length > 0) {
+        await cdp.detach();
+        return;
+      }
+      await page.waitForTimeout(100);
+    }
+  }
   await cdp.detach();
+  throw new Error(`the service worker did not show the ${payload.kind} notification`);
 }
 
 async function shown(page: Page, tag: string): Promise<Shown[]> {

@@ -2,7 +2,7 @@
  * Bottom sheet over a white dim (design A.2): Escape closes, Tab stays inside, focus returns to
  * where it was. The dialog itself takes focus when it opens or changes state (`focusKey`), so a
  * screen reader announces it and no control wears a focus ring the person did not ask for; Tab
- * then walks the controls. `initialFocus` (a CSS selector) moves focus to a field instead.
+ * then walks the controls.
  */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
@@ -19,12 +19,10 @@ export interface SheetProps {
   children: ComponentChildren;
   /** A new value re-focuses the sheet (the content changed state). */
   focusKey?: string;
-  /** Focus target inside the sheet (CSS selector); defaults to the dialog itself. */
-  initialFocus?: string;
   class?: string;
 }
 
-export default function Sheet({ label, onClose, children, focusKey, initialFocus, class: cls }: SheetProps) {
+export default function Sheet({ label, onClose, children, focusKey, class: cls }: SheetProps) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -73,10 +71,7 @@ export default function Sheet({ label, onClose, children, focusKey, initialFocus
   }, []);
 
   useEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-    const target = (initialFocus && root.querySelector<HTMLElement>(initialFocus)) || root;
-    target.focus({ preventScroll: true });
+    ref.current?.focus({ preventScroll: true });
   }, [focusKey]);
 
   return (
