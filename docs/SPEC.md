@@ -515,3 +515,7 @@ Recorded after the build so the spec stays honest. Each item is deliberate.
 - **`parseAmount`**: a single separator followed by exactly three digits is a thousands separator (`1,000` → 1 000.00); `0,500` stays 0.50.
 - **CSV export**: user-written columns are prefixed with an apostrophe when they start with `=`, `+`, `-`, `@`, tab or CR so spreadsheets never run them as formulas.
 - **Not shipped** (documented in the README): email verification, password reset, offline queueing.
+- **Push client** (§8.1): the service worker registration is resolved before notification permission is requested; the stored device id is kept until the server confirms the delete (a failed delete is retried on the next call); deleting the account leaves push untouched unless the deletion succeeds, after which only the browser-side subscription is dropped.
+- **Home list**: when the month turns while the app is open, the new month goes on top and earlier loaded months are kept; "SHOW <MONTH> →" can go back past the account's first month to reach a back-dated entry; an entry saved into a month that is not loaded is placed by reloading rather than dropped. Entries dated in a future month appear when that month arrives.
+- **Coming back to the app**: one `onAppVisible` helper drives the bootstrap refresh, the ledger refresh and the service-worker update check, on `visibilitychange` and window focus, at most every 2 s and never right after registering.
+- **Key check** (§3.2, §3.8): changing the model string re-checks the key only after a 600 ms pause, like typing the key itself.
