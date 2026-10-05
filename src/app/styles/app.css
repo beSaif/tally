@@ -102,6 +102,34 @@ button.link {
   font-size: 13px;
 }
 
+/* Text controls that sit in a box or on a rule show focus on that box or rule (thicker), not with a
+   second ring around themselves. */
+.field input:focus-visible,
+.kv input:focus-visible,
+.kv select:focus-visible,
+.cfields input:focus-visible,
+.cfields select:focus-visible,
+.rows input:focus-visible,
+.cbox input:focus-visible,
+.chip-input:focus-visible {
+  outline: none;
+}
+.field:focus-within {
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.kv.edit input:focus,
+.cfields input:focus,
+.cfields .sel:focus-within,
+.rows input.time:focus {
+  box-shadow: 0 1px 0 var(--ink);
+}
+.kv .sel:focus-within {
+  box-shadow: 0 1px 0 var(--ink);
+}
+.chip-input:focus {
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
 /* ---------- topline ---------- */
 .topline .wm-btn {
   padding: 6px 0;
