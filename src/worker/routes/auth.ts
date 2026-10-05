@@ -9,10 +9,12 @@ import {
   assertNotThrottled,
   clearAttempts,
   clearSessionCookie,
+  clientIp,
   constantTimeEqualString,
   createSession,
   deleteOtherSessions,
   deleteSession,
+  getSessionToken,
   hashPassword,
   recordFailedAttempt,
   requireUser,
@@ -67,22 +69,23 @@ authRoutes.post('/signup', async (c) => {
 
 authRoutes.post('/login', async (c) => {
   const body = await readJson(c, loginSchema);
-  await assertNotThrottled(c.env, body.email);
+  const ip = clientIp(c);
+  await assertNotThrottled(c.env, body.email, ip);
   const row = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(body.email).first<UserRow>();
   // Always run a hash verification so timing does not reveal whether the email exists.
   const ok = row ? await verifyPassword(body.password, row.password_hash) : await verifyPassword(body.password, DUMMY_HASH).then(() => false);
   if (!row || !ok) {
-    await recordFailedAttempt(c.env, body.email);
+    await recordFailedAttempt(c.env, body.email, ip);
     throw new ApiError('invalid_credentials', 'That email or password is not right');
   }
-  await clearAttempts(c.env, body.email);
+  await clearAttempts(c.env, body.email, ip);
   const session = await createSession(c.env, row.id, c.req.header('user-agent') ?? null);
   setSessionCookie(c, session.token, session.expiresAt);
   return c.json({ user: toUser(row) });
 });
 
 authRoutes.post('/logout', async (c) => {
-  const token = c.req.raw.headers.get('cookie') ? (await import('hono/cookie')).getCookie(c, 'tally_session') : undefined;
+  const token = getSessionToken(c);
   if (token) await deleteSession(c.env, token);
   clearSessionCookie(c);
   return c.body(null, 204);

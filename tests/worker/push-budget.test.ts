@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { env } from 'cloudflare:test';
 import { zonedParts } from '@shared/dates';
-import { maybeSendBudgetAlerts, runBudgetAlerts } from '../../src/worker/push/notify';
-import { addEntries, addSubscription, logKeys, makeSubscriber, mockPushService, payloadsFor, resetDb, seedUser } from './push-helpers';
+import { loadSubscriptions, maybeSendBudgetAlerts, runBudgetAlerts, sendToSubscriptions } from '../../src/worker/push/notify';
+import { addEntries, addSubscription, logKeys, makeSubscriber, mockPushService, payloadsFor, resetDb, seedUser, subscriptionRow } from './push-helpers';
 
 const NNBSP = ' ';
 const NOW = new Date('2026-10-14T10:00:00Z'); // 14 Oct, 12:00 in Zurich: 17 days left in the month
@@ -118,6 +118,35 @@ describe('budget alerts', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('gives the thresholds back when no device took the alert, so the next write retries', async () => {
+    const { userId, sub } = await budgetUser();
+    await addEntries(userId, [{ amount_cents: 170_000, occurred_at: '2026-10-14T09:00' }]);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let status = 503;
+    const calls = mockPushService(() => status);
+
+    expect(await runBudgetAlerts(env, userId, '2026-10-14T09:00', NOW)).toBe(0);
+    expect(calls).toHaveLength(1);
+    expect(await logKeys(userId, 'budget')).toEqual([]);
+
+    status = 201;
+    expect(await runBudgetAlerts(env, userId, '2026-10-14T09:00', NOW)).toBe(1);
+    expect((await payloadsFor(calls, sub)).map((p) => p.title)).toEqual(['80% of your budget', '80% of your budget']);
+    expect(await logKeys(userId, 'budget')).toEqual(['2026-10:50', '2026-10:80']);
+  });
+
+  it('keeps the thresholds when every device is gone: there is no one to retry for', async () => {
+    const { userId } = await budgetUser();
+    await addEntries(userId, [{ amount_cents: 120_000, occurred_at: '2026-10-14T09:00' }]);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockPushService(410);
+
+    expect(await runBudgetAlerts(env, userId, '2026-10-14T09:00', NOW)).toBe(0);
+    expect(await logKeys(userId, 'budget')).toEqual(['2026-10:50']);
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?').bind(userId).first<{ n: number }>();
+    expect(left?.n).toBe(0);
+  });
+
   it('keeps the alert for later when push is not configured yet', async () => {
     const { userId } = await budgetUser();
     await addEntries(userId, [{ amount_cents: 120_000, occurred_at: '2026-10-14T09:00' }]);
@@ -141,6 +170,12 @@ describe('budget alerts', () => {
     await addEntries(userId, [{ amount_cents: 150_000, occurred_at: '2026-10-20T12:00' }]);
     const calls = mockPushService(201);
     const halloweenNight = new Date('2026-10-31T23:30:00Z'); // Zurich: 1 Nov 00:30 · New York: 31 Oct 19:30
+
+    // A message the New York device accepted does not make it the one in use.
+    const [nyRow] = (await loadSubscriptions(env, userId)).filter((s) => s.id === nyId);
+    expect((await sendToSubscriptions(env, nyRow ? [nyRow] : [], (lang) => ({ kind: 'test', title: 'T', body: 'B', url: '/', tag: 'test', lang }))).sent).toBe(1);
+    expect(await subscriptionRow(nyId)).toMatchObject({ last_seen_at: 1_000 });
+    calls.length = 0;
 
     expect(await runBudgetAlerts(env, userId, '2026-10-31T19:00', halloweenNight)).toBe(0);
     expect(calls).toHaveLength(0);

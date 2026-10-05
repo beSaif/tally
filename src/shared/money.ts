@@ -32,13 +32,21 @@ export function groupThousands(n: number): string {
 }
 
 /**
- * Parses what a person types as an amount: "12", "12.5", "12,50", "1 284.60", "CHF 4.50", "4.50 chf".
- * Returns integer cents or null when there is no number.
+ * A lone separator between one to three leading digits and exactly three more groups thousands:
+ * nobody types cents with three decimals ("1,000", "12.000"). A leading zero ("0.500") still
+ * reads as a fraction.
+ */
+const THOUSANDS_ONLY = /^[1-9]\d{0,2}[.,]\d{3}$/;
+
+/**
+ * Parses what a person types as an amount: "12", "12.5", "12,50", "1 284.60", "1,000", "CHF 4.50",
+ * "4.50 chf". Returns integer cents or null when there is no number.
  */
 export function parseAmount(input: string): number | null {
   let s = input.trim().replace(/[  '\s]/g, '');
   s = s.replace(/[^0-9.,-]/g, '');
   if (!s) return null;
+  if (THOUSANDS_ONLY.test(s)) s = s.replace(/[.,]/, '');
   // If both separators appear, the last one is the decimal separator.
   const lastDot = s.lastIndexOf('.');
   const lastComma = s.lastIndexOf(',');

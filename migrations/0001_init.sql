@@ -61,9 +61,10 @@ CREATE INDEX entries_user_time ON entries(user_id, occurred_at);
 
 CREATE TABLE login_attempts (
   email        TEXT NOT NULL,
+  ip           TEXT NOT NULL DEFAULT '',     -- CF-Connecting-IP; '' when unknown
   attempted_at INTEGER NOT NULL
 );
-CREATE INDEX login_attempts_email ON login_attempts(email, attempted_at);
+CREATE INDEX login_attempts_email ON login_attempts(email, ip, attempted_at);
 
 CREATE TABLE push_subscriptions (
   id           TEXT PRIMARY KEY,
@@ -83,13 +84,19 @@ CREATE INDEX push_subs_user ON push_subscriptions(user_id);
 CREATE TABLE notification_log (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   kind       TEXT NOT NULL,                  -- reminder | budget | weekly | monthly
-  period_key TEXT NOT NULL,                  -- e.g. 2026-10-05, 2026-10:80, 2026-W40, 2026-09
+  -- Scheduled kinds: period and device zone (2026-10-05@Europe/Zurich, 2026-W40@Europe/Zurich,
+  -- 2026-09@Europe/Zurich); budget: month and threshold (2026-10:80).
+  period_key TEXT NOT NULL,
   sent_at    INTEGER NOT NULL,
   PRIMARY KEY (user_id, kind, period_key)
 );
+-- Every cron run reads the recent claims and prunes old ones.
+CREATE INDEX notification_log_sent ON notification_log(sent_at);
 
 CREATE TABLE reminder_skips (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   day     TEXT NOT NULL,                     -- 'YYYY-MM-DD' local
   PRIMARY KEY (user_id, day)
 );
+-- Every cron run prunes old skips.
+CREATE INDEX reminder_skips_day ON reminder_skips(day);

@@ -4,9 +4,8 @@
  * `:`, `?`, `!` and `%` (docs/SPEC.md §4).
  */
 import type { ResolvedLanguage } from '@shared/api';
-import { formatAmount, formatBudget, percentOf } from '@shared/money';
+import { formatAmount, formatBudget, NNBSP, percentOf } from '@shared/money';
 
-const NNBSP = ' ';
 const MINUS = '−';
 
 export interface NotificationText {
