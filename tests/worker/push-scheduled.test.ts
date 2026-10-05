@@ -367,7 +367,8 @@ describe('delivery bookkeeping', () => {
     expect(await subscriptionRow(flakyId)).toMatchObject({ failures: 4 });
     const healthyRow = await subscriptionRow(healthyId);
     expect(healthyRow?.failures).toBe(0);
-    expect(healthyRow?.last_seen_at).toBeGreaterThan(1);
+    // Accepted for delivery says nothing about the device being in use: only /subscribe moves last_seen_at.
+    expect(healthyRow?.last_seen_at).toBe(1);
 
     await runScheduled(env, new Date('2026-10-06T18:37:00Z')); // next day's reminder
     expect(await subscriptionRow(flakyId)).toBeNull();

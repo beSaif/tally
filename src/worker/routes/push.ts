@@ -96,7 +96,7 @@ pushRoutes.post('/test', async (c) => {
   if (!vapid) throw notConfigured();
   const all = await loadSubscriptions(c.env, c.var.user.id);
   const subs = body.endpoint ? all.filter((s) => s.endpoint === body.endpoint) : all;
-  const sent = await sendToSubscriptions(c.env, subs, (lang) => ({ kind: 'test', ...testText(lang), url: '/settings', tag: 'test', lang }), vapid);
+  const { sent } = await sendToSubscriptions(c.env, subs, (lang) => ({ kind: 'test', ...testText(lang), url: '/settings', tag: 'test', lang }), vapid);
   return c.json({ sent });
 });
 

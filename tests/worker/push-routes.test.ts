@@ -185,7 +185,7 @@ describe('push routes', () => {
     const fr = await makeSubscriber(endpoint('test-fr'));
     await subscribe(s, en, { lang: 'en' });
     const frId = await subscribe(s, fr, { lang: 'fr' });
-    await env.DB.prepare('UPDATE push_subscriptions SET failures = 2 WHERE id = ?').bind(frId).run();
+    await env.DB.prepare('UPDATE push_subscriptions SET failures = 2, last_seen_at = 5 WHERE id = ?').bind(frId).run();
     const calls = mockPushService(201);
 
     const res = await api('/api/push/test', { cookie: s.cookie, body: {} });
@@ -205,8 +205,10 @@ describe('push routes', () => {
       { kind: 'test', title: 'Notifications are on', body: 'This is how Tally will nudge you.', url: '/settings', tag: 'test', lang: 'en' },
     ]);
     expect(await payloadsFor(calls, fr)).toMatchObject([{ kind: 'test', title: 'Notifications activées', lang: 'fr' }]);
-    // A delivered message resets the failure count; tests are never logged.
-    expect(await subscriptionRow(frId)).toMatchObject({ failures: 0 });
+    // Both devices sit behind one push service: one VAPID signature (ECDSA is randomised) serves both.
+    expect(calls[1]?.headers.get('Authorization')).toBe(calls[0]?.headers.get('Authorization'));
+    // A delivered message resets the failure count, but is no sign the device is in use; tests are never logged.
+    expect(await subscriptionRow(frId)).toMatchObject({ failures: 0, last_seen_at: 5 });
     const logged = await env.DB.prepare('SELECT COUNT(*) AS n FROM notification_log WHERE user_id = ?').bind(s.userId).first<{ n: number }>();
     expect(logged?.n).toBe(0);
   });

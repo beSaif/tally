@@ -163,6 +163,24 @@ export async function vapidAuthorization(endpoint: string, vapid: Vapid, now: nu
 }
 
 /**
+ * Authorization headers by push service origin. The token names nothing but the origin and lasts
+ * 12 hours, so one signature serves every device behind a push service for a whole send or cron
+ * run. A cache belongs to one Vapid and one run: never keep it longer.
+ */
+export type VapidCache = Map<string, Promise<string>>;
+
+/** vapidAuthorization, signed once per origin and cache. */
+export function cachedVapidAuthorization(endpoint: string, vapid: Vapid, cache: VapidCache): Promise<string> {
+  const origin = new URL(endpoint).origin;
+  let header = cache.get(origin);
+  if (!header) {
+    header = vapidAuthorization(endpoint, vapid);
+    cache.set(origin, header);
+  }
+  return header;
+}
+
+/**
  * RFC 8291 encryption of `plaintext` for a subscription (`p256dh` and `auth` as the browser
  * reports them, base64url). Returns the aes128gcm body:
  * salt(16) || rs(4) || idlen(1) || sender public key(65) || ciphertext.
@@ -202,8 +220,15 @@ export async function encryptPayload(plaintext: Uint8Array, p256dh: string, auth
 /**
  * Encrypts and POSTs one message. HTTP outcomes come back as a result (404/410 mean the
  * subscription is gone for good); malformed subscription keys and network errors throw.
+ * Pass a `cache` shared by the other sends of the same run to sign once per push service.
  */
-export async function sendWebPush(sub: PushTarget, payload: PushPayload | string | Uint8Array, vapid: Vapid, opts: SendOptions): Promise<SendResult> {
+export async function sendWebPush(
+  sub: PushTarget,
+  payload: PushPayload | string | Uint8Array,
+  vapid: Vapid,
+  opts: SendOptions,
+  cache: VapidCache = new Map(),
+): Promise<SendResult> {
   const plaintext = payload instanceof Uint8Array ? payload : enc.encode(typeof payload === 'string' ? payload : JSON.stringify(payload));
   const body = await encryptPayload(plaintext, sub.p256dh, sub.auth);
   const res = await fetch(sub.endpoint, {
@@ -213,7 +238,7 @@ export async function sendWebPush(sub: PushTarget, payload: PushPayload | string
       'Content-Encoding': 'aes128gcm',
       TTL: String(Math.max(0, Math.floor(opts.ttl))),
       Urgency: opts.urgency,
-      Authorization: await vapidAuthorization(sub.endpoint, vapid),
+      Authorization: await cachedVapidAuthorization(sub.endpoint, vapid, cache),
     },
     body,
   });

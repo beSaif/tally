@@ -3,6 +3,7 @@ import { env } from 'cloudflare:test';
 import { b64url } from '../../src/worker/lib/auth';
 import {
   MAX_PLAINTEXT_BYTES,
+  cachedVapidAuthorization,
   encryptPayload,
   fromB64url,
   generateVapidKeys,
@@ -11,6 +12,7 @@ import {
   vapidAuthorization,
   vapidFromEnv,
   type Vapid,
+  type VapidCache,
 } from '../../src/worker/push/webpush';
 import { decryptPushBody, makeSubscriber, mockPushService, utf8 } from './push-helpers';
 
@@ -124,6 +126,24 @@ describe('VAPID (RFC 8292)', () => {
     const header = await vapidAuthorization('https://push.example:8443/sub/1', await testVapid(), 0);
     const claims = header.slice('vapid t='.length).split('.')[1] ?? '';
     expect(JSON.parse(td.decode(fromB64url(claims)))).toMatchObject({ aud: 'https://push.example:8443', exp: 43200 });
+  });
+
+  it('signs once per push service origin and cache', async () => {
+    const vapid = await testVapid();
+    // ECDSA signatures are randomised, so two signings never produce the same header.
+    expect(await vapidAuthorization('https://push.example/a', vapid, 0)).not.toBe(await vapidAuthorization('https://push.example/a', vapid, 0));
+
+    const sign = vi.spyOn(crypto.subtle, 'sign');
+    const cache: VapidCache = new Map();
+    const a = await cachedVapidAuthorization('https://push.example/sub/a', vapid, cache);
+    const b = await cachedVapidAuthorization('https://push.example/sub/b?x=1', vapid, cache);
+    const other = await cachedVapidAuthorization('https://other.example/sub/a', vapid, cache);
+    expect(b).toBe(a);
+    expect(other).not.toBe(a);
+    expect([...cache.keys()]).toEqual(['https://push.example', 'https://other.example']);
+    expect(sign).toHaveBeenCalledTimes(2);
+    // A fresh cache signs again.
+    expect(await cachedVapidAuthorization('https://push.example/sub/a', vapid, new Map())).not.toBe(a);
   });
 
   it('reads the keys from the environment, and reports missing ones as not configured', async () => {
