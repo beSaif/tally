@@ -165,15 +165,6 @@ export function signedPercent(n: number): string {
   return '0';
 }
 
-/** Accepts what Gemini or an input gives back and returns a valid 'YYYY-MM-DDTHH:MM' or the fallback. */
-export function normalizeMinute(value: string | null | undefined, fallback: string): string {
-  if (!value) return fallback;
-  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/.exec(value.trim());
-  if (m) return `${m[1]}T${m[2]}:${m[3]}`;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return `${value.trim()}T${fallback.slice(11, 16)}`;
-  return fallback;
-}
-
 /** Plain decimal for an amount input ("21.00"), never grouped so it round-trips through parseAmount. */
 export function amountInputValue(cents: number): string {
   return (cents / 100).toFixed(2);

@@ -10,7 +10,6 @@ import {
   groupByDay,
   monthLong,
   monthShortYear,
-  normalizeMinute,
   periodLabel,
   signedPercent,
   sumCents,
@@ -104,14 +103,6 @@ describe('overview maths', () => {
 });
 
 describe('inputs', () => {
-  it('normalises what Gemini or a datetime input gives back', () => {
-    expect(normalizeMinute('2026-10-05T20:14', 'x')).toBe('2026-10-05T20:14');
-    expect(normalizeMinute('2026-10-05 20:14:33', 'x')).toBe('2026-10-05T20:14');
-    expect(normalizeMinute('2026-10-03', '2026-10-05T20:14')).toBe('2026-10-03T20:14');
-    expect(normalizeMinute('yesterday', '2026-10-05T20:14')).toBe('2026-10-05T20:14');
-    expect(normalizeMinute(null, 'fallback')).toBe('fallback');
-  });
-
   it('writes amounts for inputs without grouping', () => {
     expect(amountInputValue(2100)).toBe('21.00');
     expect(amountInputValue(128460)).toBe('1284.60');
