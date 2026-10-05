@@ -108,7 +108,7 @@ Configuration (`wrangler.jsonc` vars / secrets):
 
 Enable them in **Settings → Notifications** on each device. Android and desktop browsers work
 directly; on iPhone/iPad, add Tally to the Home Screen first (Share → Add to Home Screen), then
-enable notifications from the installed app (iOS 16.4+). Reminder time and the notification kinds
+enable notifications from the installed app (iOS 16.4+). Reminders arrive at the first quarter-hour check at or after your time (never early). Reminder time and the notification kinds
 are account-wide; subscriptions are per device and can be removed from the device list. The
 "Skip today" action on a reminder silences that day's reminder.
 
@@ -117,7 +117,7 @@ are account-wide; subscriptions are per device and can be removed from the devic
 - Your Gemini key is stored only in your browser (`localStorage`) and sent only to Google.
 - Passwords are hashed with PBKDF2-SHA256 (100 000 iterations); sessions are opaque tokens stored
   hashed, in an `HttpOnly` `SameSite=Lax` cookie. Cross-origin mutations are refused. Login is
-  throttled per email.
+  throttled per email and address.
 - Push payloads are end-to-end encrypted (RFC 8291). The Worker only stores the subscription.
 - Export your data any time as CSV. Deleting the account removes everything.
 

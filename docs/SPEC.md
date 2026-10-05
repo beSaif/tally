@@ -293,10 +293,10 @@ categories(id PK, user_id FK CASCADE, name NOT NULL, position INT 0, created_at,
 entries(id PK, user_id FK CASCADE, amount_cents INT ≥ 0, currency, description NOT NULL, category_id FK→categories ON DELETE SET NULL,
         occurred_at TEXT, note NULL, source 'text'|'voice'|'photo'|'manual', raw_input NULL, created_at, updated_at)
   INDEX entries(user_id, occurred_at)
-login_attempts(email, attempted_at) INDEX(email, attempted_at)
+login_attempts(email, ip '' (CF-Connecting-IP), attempted_at) INDEX(email, ip, attempted_at)
 push_subscriptions(id PK, user_id FK CASCADE, endpoint UNIQUE, p256dh, auth, user_agent, lang 'en', tz 'UTC', created_at, last_seen_at, failures 0)
-notification_log(user_id FK CASCADE, kind, period_key, sent_at, PRIMARY KEY(user_id, kind, period_key))
-reminder_skips(user_id FK CASCADE, day 'YYYY-MM-DD', PRIMARY KEY(user_id, day))
+notification_log(user_id FK CASCADE, kind, period_key, sent_at, PRIMARY KEY(user_id, kind, period_key)) INDEX(sent_at)
+reminder_skips(user_id FK CASCADE, day 'YYYY-MM-DD', PRIMARY KEY(user_id, day)) INDEX(day)
 ```
 
 Signup creates the `users` row, a `settings` row with defaults and the default categories for the
@@ -310,14 +310,14 @@ Types live in `src/shared/api.ts` (authoritative). JSON in/out. Errors are
 `validation` 400 · `not_found` 404 · `rate_limited` 429 · `forbidden` 403 · `internal` 500.
 
 Auth: cookie `tally_session` (HttpOnly; `Secure` when the request is https; `SameSite=Lax`; `Path=/`; 30 days;
-renewed when < 15 days remain). State-changing requests must carry `Content-Type: application/json`
+renewed when < 15 days remain, at most once a day). State-changing requests must carry `Content-Type: application/json`
 (or be the CSV/empty-body endpoints listed) and, when an `Origin` header is present, it must match the
 request origin (else 403). `requireUser` middleware puts `{ id, email }` on `c.var.user`.
 
 | Method & path | Body → Response |
 | --- | --- |
 | `POST /auth/signup` | `{ email, password (≥8), language: 'en'\|'fr', invite_code? }` → 201 `{ user }` + cookie. Env `SIGNUPS_ENABLED="false"` → 403 `signups_disabled`. Env `INVITE_CODE` set and ≠ body → 403 `invite_required`. |
-| `POST /auth/login` | `{ email, password }` → 200 `{ user }` + cookie. Generic `invalid_credentials`. > 10 failures for an email in 15 min → 429. |
+| `POST /auth/login` | `{ email, password }` → 200 `{ user }` + cookie. Generic `invalid_credentials`. 429 after ≥ 10 failures for that email from the caller's address (`CF-Connecting-IP`) in 15 min, or ≥ 100 for the email from all addresses; a successful login clears its own address's failures. |
 | `POST /auth/logout` | → 204, deletes the session, clears the cookie. |
 | `GET /auth/me` | → `{ user, settings, categories }` (bootstrap). 401 if no session. |
 | `POST /auth/password` | `{ current, new }` → 204. Other sessions of the user are revoked. |
@@ -435,7 +435,7 @@ Key storage: `localStorage['tally.gemini.key']`; model comes from server setting
 
 - Support check: `'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window`. iOS Safari supports Web Push only when installed to the Home Screen (`navigator.standalone`), so when not supported on iOS show the install how-to.
 - Enable: `Notification.requestPermission()` → `registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey })` with the key from `GET /api/push/vapid-public-key` (base64url → Uint8Array) → `POST /api/push/subscribe` with `{ subscription: sub.toJSON(), user_agent: navigator.userAgent, lang, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }`.
-- On every app start when permission is `granted`: read `pushManager.getSubscription()`; if present, re-`POST /subscribe` when lang/tz changed (cheap upsert) so the server stays current.
+- On every app start when permission is `granted`: read `pushManager.getSubscription()`; if present, re-`POST /subscribe` (cheap upsert with the current lang, tz and user agent) so the server stays current and knows which device was seen last.
 - Disable on this device: `sub.unsubscribe()` + `DELETE /api/push/subscriptions/:id`.
 - Preferences (reminder on/off, time, only-if-empty, budget, weekly, monthly) are **account-wide** settings (`PUT /api/settings`).
 - `sw.ts`: `push` → `event.waitUntil(self.registration.showNotification(payload.title, { body, tag, data:{ url, kind }, icon:'/icons/icon-192.png', badge:'/icons/badge-96.png' (monochrome receipt on transparent), actions, renotify:false, lang }))`; `notificationclick` → if `action === 'skip'` → `fetch('/api/push/skip', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ day }) })` then close; else focus an open client (`clients.matchAll({type:'window', includeUncontrolled:true})`) and `navigate(url)` or `clients.openWindow(url)`. `pushsubscriptionchange` → re-subscribe with the stored key and POST to `/api/push/subscribe`.
@@ -458,17 +458,17 @@ type PushPayload = { kind: 'reminder'|'budget'|'weekly'|'monthly'|'test'; title:
 
 ### 8.4 Server: what gets sent, when (`push/notify.ts`, `push/scheduled.ts`)
 
-Cron `*/15 * * * *`. For every user with ≥1 subscription, group subscriptions by `tz`; for each tz compute the local time of the run (`Intl.DateTimeFormat` with `timeZone`, rounded down to the 15-minute slot) and:
+Cron `*/15 * * * *`. For every user with ≥1 subscription, group subscriptions by `tz`; for each tz compute the local time of the run (`Intl.DateTimeFormat` with `timeZone`) and send what is **due**, i.e. whose window is open:
 
 | Kind | When (local) | Condition | `period_key` | Content |
 | --- | --- | --- | --- | --- |
-| `reminder` | slot == `notif_reminder_time` | `notif_reminder` and no `reminder_skips` row for the day and (not `only_if_empty` or no entries that day) | `YYYY-MM-DD` | EN "Anything spent today? One sentence is enough." · actions **Log now** (`/?compose=1`), **Skip today** |
-| `weekly` | Monday 09:00 slot | `notif_weekly` and ≥1 entry last ISO week | `YYYY-Www` of last week | title "Last week: 256.90 CHF" · body "Groceries led at 41% · 12 entries" (or "+8% vs the week before" when previous week > 0) · url `/overview?p=week` |
-| `monthly` | 1st, 09:00 slot | `notif_monthly` and ≥1 entry last month | `YYYY-MM` of last month | title "September: 1 284.60 CHF" · body "64% of your budget · Groceries 412.30 led" (no budget: "Groceries 412.30 led · 38 entries") · url `/overview?p=month` |
-| `budget` | immediately after `POST/PATCH /entries` (via `ctx.waitUntil`) | `notif_budget`, a budget is set, the entry's month is the current local month of the device tz (use the first subscription's tz), and total ≥ threshold not yet logged | `YYYY-MM:50`/`:80`/`:100` | 50 → "Halfway through your budget" · 80 → "80% of your budget" · 100 → "Budget reached"; body "1 620.00 of 2 000 CHF · 17 days left" · url `/overview?p=month` · urgency high. Only the **highest** newly-crossed threshold is sent; all crossed thresholds are logged. |
+| `reminder` | from `notif_reminder_time` until 59 min after (never early; a window past midnight belongs to the day it opened on) | `notif_reminder` and no `reminder_skips` row for the day and (not `only_if_empty` or no entries that day) | `YYYY-MM-DD@<tz>` | EN "Anything spent today? One sentence is enough." · actions **Log now** (`/?compose=1`), **Skip today** |
+| `weekly` | Monday 09:00–09:59 | `notif_weekly` and ≥1 entry last ISO week | `YYYY-Www@<tz>` of last week | title "Last week: 256.90 CHF" · body "Groceries led at 41% · 12 entries" (or "+8% vs the week before" when previous week > 0) · url `/overview?p=week` |
+| `monthly` | 1st, 09:00–09:59 | `notif_monthly` and ≥1 entry last month | `YYYY-MM@<tz>` of last month | title "September: 1 284.60 CHF" · body "64% of your budget · Groceries 412.30 led" (no budget: "Groceries 412.30 led · 38 entries") · url `/overview?p=month` |
+| `budget` | immediately after `POST/PATCH /entries` (via `ctx.waitUntil`; once per month the batch touches) | `notif_budget`, a budget is set, the entry's month is the current local month of the device tz (use the first subscription's tz), and total ≥ threshold not yet logged | `YYYY-MM:50`/`:80`/`:100` | 50 → "Halfway through your budget" · 80 → "80% of your budget" · 100 → "Budget reached"; body "1 620.00 of 2 000 CHF · 17 days left" · url `/overview?p=month` · urgency high. Only the **highest** newly-crossed threshold is sent; all crossed thresholds are logged. |
 | `test` | `POST /push/test` | — | not logged | "Notifications are on" · "This is how Tally will nudge you." |
 
-Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if no row was inserted, skip). Localise per subscription `lang`; amounts formatted with `formatAmount`. Strings in `push/strings.ts` (EN + FR, see §4 typography).
+Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if no row was inserted, skip). `<tz>` in the keys is the device zone (or `UTC` when the runtime does not know it), so each zone a person has devices in gets its own copy at its own local time. If no device accepted the message but a targeted subscription remains, delete the row again so a later run in the window (or, for budget alerts, the next entry write) retries. A delivery only resets `failures`; `last_seen_at` changes only on `POST /push/subscribe`, which the client therefore repeats on every app start. Each cron run counts its D1 queries (every statement, batched or not), starts no new item past 40 and leaves the rest to the next run in the window; it also deletes `reminder_skips` older than 60 days (UTC) and `notification_log` rows older than 90 days. Localise per subscription `lang`; amounts formatted with `formatAmount`. Strings in `push/strings.ts` (EN + FR, see §4 typography).
 
 ## 9. PWA
 
@@ -480,7 +480,7 @@ Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if
 ## 10. Testing
 
 - **Unit (node)**: `formatAmount`, `parseAmount`, period helpers (ISO week, month/year ranges, days left), CSV escaping, Gemini request builder (exact body), response parsing (fenced JSON, missing fields, zod failures → `bad_response`), WAV encoder header/bytes, i18n key parity, push payload builder.
-- **Worker**: signup/login/logout/me; invite code + signups disabled; rate limit; cookie flags; origin check; settings validation; categories replace semantics (rename keeps id, delete nulls entries); entries CRUD + batch + range validation + user isolation; summary math incl. previous period + by_day; CSV content; push subscribe/upsert/list/delete/skip; webpush RFC 8291 vector + VAPID header shape; scheduled: reminder slot match, only-if-empty, skip, dedup, weekly/monthly keys, budget thresholds (highest only, logged all), subscription cleanup on 410.
+- **Worker**: signup/login/logout/me; invite code + signups disabled; rate limit; cookie flags; origin check; settings validation; categories replace semantics (rename keeps id, delete nulls entries); entries CRUD + batch + range validation + user isolation; summary math incl. previous period + by_day; CSV content; push subscribe/upsert/list/delete/skip; webpush RFC 8291 vector + VAPID header shape; scheduled: reminder window match, only-if-empty, skip, dedup, weekly/monthly keys, budget thresholds (highest only, logged all), subscription cleanup on 410.
 - **E2E (Playwright, Chromium 1194 at `/opt/pw-browsers`, viewport 390×844, DPR 2)**: Gemini mocked with `page.route('https://generativelanguage.googleapis.com/**')` returning fixtures; `PushManager.subscribe` faked via `addInitScript`. Flows: signup → setup (key check) → text log (single) → batch (three entries) → edit one → overview totals & bars → export CSV (download) → ask → settings: notifications on, test → logout → login → data still there. Screenshots saved to `e2e/__screenshots__/` (git-ignored) for visual review against the design.
 
 ## 11. Security
