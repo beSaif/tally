@@ -64,12 +64,11 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
   return reg ? reg.pushManager.getSubscription().catch(() => null) : null;
 }
 
-// What this device last told the server, to skip needless re-subscribes on start.
+// The server's id for this device's subscription: turning push off still works when the device
+// list cannot be loaded.
 const META_KEY = 'tally.push';
 interface PushMeta {
   endpoint: string;
-  lang: ResolvedLanguage;
-  tz: string;
   id: string;
 }
 
@@ -87,7 +86,7 @@ function writeMeta(meta: PushMeta | null): void {
     if (meta) localStorage.setItem(META_KEY, JSON.stringify(meta));
     else localStorage.removeItem(META_KEY);
   } catch {
-    /* storage blocked: we simply re-sync more often */
+    /* storage blocked: turning push off then relies on the device list */
   }
 }
 
@@ -118,7 +117,7 @@ async function sync(sub: PushSubscription, language: ResolvedLanguage): Promise<
     lang: language,
     tz,
   });
-  writeMeta({ endpoint: sub.endpoint, lang: language, tz, id });
+  writeMeta({ endpoint: sub.endpoint, id });
   await shareLanguageWithWorker(language);
   return id;
 }
@@ -160,12 +159,14 @@ export async function disablePush(rows: readonly PushSubscriptionRow[]): Promise
   }
 }
 
-/** On start: when this device is subscribed, keep its language and time zone current on the server. */
+/**
+ * On every start (and when the language changes): a subscribed device tells the server it is
+ * alive, with its current language, time zone and user agent. The upsert is cheap, and the server
+ * relies on it: last_seen_at picks the device whose zone budget alerts follow.
+ */
 export async function resyncPush(language: ResolvedLanguage): Promise<void> {
   if (!pushSupport().ok || permission() !== 'granted') return;
   const sub = await currentSubscription();
   if (!sub) return;
-  const meta = readMeta();
-  if (meta && meta.endpoint === sub.endpoint && meta.lang === language && meta.tz === timeZone()) return;
   await sync(sub, language).catch(() => undefined);
 }

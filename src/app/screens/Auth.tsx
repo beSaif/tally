@@ -2,7 +2,7 @@
 import { useState } from 'preact/hooks';
 import { lang, t, type TKey } from '../i18n';
 import { api, isApiError } from '../lib/api';
-import { bootstrap } from '../lib/store';
+import { bootstrap, sessionState } from '../lib/store';
 import { linkTo } from '../router';
 import { Lines } from '../components/Controls';
 import Wordmark from '../components/Wordmark';
@@ -45,6 +45,11 @@ export default function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
       }
       // The gate takes it from here: /setup when this device has no key or setup is unfinished, else home.
       await bootstrap();
+      if (sessionState.value !== 'authed') {
+        // Signed in, but the session could not be loaded (connection dropped): let the person retry.
+        setError('auth.err.generic');
+        setBusy(false);
+      }
     } catch (err) {
       const code = isApiError(err) ? err.code : 'internal';
       if (code === 'invite_required') setNeedInvite(true);

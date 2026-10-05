@@ -95,6 +95,17 @@ test('a test notification is encrypted for this device and shown by the service 
   const subscriptions = (await (await page.request.get('/api/push/subscriptions')).json()) as { subscriptions: Array<{ endpoint: string; lang: string; tz: string }> };
   expect(subscriptions.subscriptions).toEqual([expect.objectContaining({ endpoint: sub.endpoint, lang: 'en', tz: 'Europe/Zurich' })]);
 
+  // Every app start tells the server this device is alive (language, zone, user agent).
+  const announced = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/push/subscribe'));
+  await page.reload();
+  expect((await announced).postDataJSON()).toMatchObject({
+    subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+    lang: 'en',
+    tz: 'Europe/Zurich',
+    user_agent: expect.stringContaining('Mozilla/5.0'),
+  });
+  await expect(page.getByText('This device', { exact: true })).toBeVisible();
+
   await page.getByRole('button', { name: 'Send a test notification' }).click();
   await expect(page.locator('.toast')).toHaveText('Sent to 1 device.');
   const [delivery] = sink.to(sub.endpoint);
