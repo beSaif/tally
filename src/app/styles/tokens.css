@@ -433,13 +433,14 @@ textarea::placeholder {
   grid-template-columns: 86px 1fr;
   border-top: 1px solid var(--line);
 }
-.kv > div {
+/* Any element can be a cell (labels in edit mode), so the selectors are not tied to <div>. */
+.kv > * {
   padding: 9px 0;
   border-bottom: 1px solid var(--line);
   font-size: 14px;
   min-width: 0;
 }
-.kv > div:nth-child(odd) {
+.kv > :nth-child(odd) {
   font-family: var(--mono);
   font-size: 10.5px;
   letter-spacing: 0.08em;
