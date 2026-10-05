@@ -61,6 +61,30 @@ describe('parsePayload', () => {
   });
 });
 
+describe('appPath', () => {
+  const origin = 'https://tally.example.workers.dev';
+
+  it('keeps paths of this app', () => {
+    expect(appPath('/overview?p=week')).toBe('/overview?p=week');
+    expect(appPath('/overview?p=week', origin)).toBe('/overview?p=week');
+    expect(appPath('/?compose=1', origin)).toBe('/?compose=1');
+    expect(appPath('/x\\y', origin)).toBe('/x\\y');
+  });
+
+  it('turns anything that resolves to another origin into "/"', () => {
+    for (const url of ['/\\evil.example/x', '//evil.example', '/\\evil', 'https://evil.example', '/\t/evil.example', '/\n/evil.example', ' //evil', '', 'overview']) {
+      expect(appPath(url), JSON.stringify(url)).toBe('/');
+      expect(appPath(url, origin), JSON.stringify(url)).toBe('/');
+    }
+    expect(appPath(null)).toBe('/');
+  });
+
+  it('applies to payloads and clicks too', () => {
+    expect(parsePayload(data({ ...REMINDER, url: '/\\evil.example/x' })).url).toBe('/');
+    expect(planClick('', { url: '/\\evil.example/x' })).toEqual({ kind: 'open', url: '/' });
+  });
+});
+
 describe('notificationFor', () => {
   it('builds the showNotification options of spec §8.1', () => {
     const { title, options } = notificationFor(parsePayload(data(REMINDER)));
@@ -133,6 +157,15 @@ describe('openApp', () => {
     const clients = clientsWith([]);
     await openApp('/overview?p=week', origin, clients);
     expect(clients.opened).toEqual([`${origin}/overview?p=week`]);
+  });
+
+  it('never opens or routes to another origin', async () => {
+    const clients = clientsWith([]);
+    await openApp('/\\evil.example/x', origin, clients);
+    expect(clients.opened).toEqual([`${origin}/`]);
+    const mine = win(`${origin}/`);
+    await openApp('/\t/evil.example', origin, clientsWith([mine]));
+    expect(mine.messages).toEqual([{ type: NAVIGATE_MESSAGE, url: '/' }]);
   });
 });
 

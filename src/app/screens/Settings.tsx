@@ -1,7 +1,6 @@
 /** Settings (spec §3.8): Gemini, defaults, categories, notifications, account, install, about. */
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { Category, Language, NotificationPrefs, PushSubscriptionRow } from '@shared/api';
-import { CURRENCIES } from '@shared/constants';
+import type { Category, NotificationPrefs, PushSubscriptionRow } from '@shared/api';
 import { toLocalDay } from '@shared/dates';
 import { formatAmount, parseAmount } from '@shared/money';
 import { version } from '../../../package.json';
@@ -9,13 +8,14 @@ import { lang, t, type TKey } from '../i18n';
 import { api, isApiError } from '../lib/api';
 import { dayShortMonth } from '../lib/format';
 import { installed, installPrompt, promptInstall } from '../lib/install';
-import { currentSubscription, disablePush, enablePush, isIOS, permission, PushError, pushSupport } from '../lib/push';
+import { currentSubscription, disablePush, enablePush, isIOS, permission, PushError, pushSupport, unsubscribeLocally } from '../lib/push';
 import { categories, forgetGeminiKey, geminiKey, model, replaceCategories, saveGeminiKey, settings, signedOut, updateSettings, user } from '../lib/store';
 import { showToast } from '../lib/toast';
 import { describeUserAgent } from '../lib/ua';
 import { back, navigate } from '../router';
 import AddChip from '../components/AddChip';
-import { Section, Select, Toggle } from '../components/Controls';
+import { Section, Toggle } from '../components/Controls';
+import DefaultsFields from '../components/DefaultsFields';
 import { IconTrash } from '../components/Icons';
 import KeyField, { KeyStatusLine, maskKey, useKeyCheck } from '../components/KeyField';
 
@@ -159,7 +159,6 @@ function DefaultsSection() {
   const [budget, setBudget] = useState(s?.budget_cents ? formatAmount(s.budget_cents) : '');
   useEffect(() => setBudget(s?.budget_cents ? formatAmount(s.budget_cents) : ''), [s?.budget_cents]);
   if (!s) return null;
-  const language = lang.value;
 
   const save = (input: Parameters<typeof updateSettings>[0]) => updateSettings(input).catch(saveFailed);
 
@@ -179,49 +178,17 @@ function DefaultsSection() {
 
   return (
     <Section title={t('settings.defaults')} id="set-defaults">
-      <div class="kv">
-        <div>{t('setup.currency')}</div>
-        <div>
-          <Select
-            label={t('setup.currency')}
-            value={s.currency}
-            options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.code} — ${c[language]}` }))}
-            onChange={(v) => void save({ currency: v })}
-          />
-        </div>
-        <div>{t('setup.language')}</div>
-        <div>
-          <Select
-            label={t('setup.language')}
-            value={s.language}
-            options={[
-              { value: 'auto', label: t('lang.auto') },
-              { value: 'en', label: t('lang.en') },
-              { value: 'fr', label: t('lang.fr') },
-            ]}
-            onChange={(v) => void save({ language: v as Language })}
-          />
-        </div>
-        <label for="set-budget">{t('setup.budget')}</label>
-        <div class="row budget">
-          <input
-            id="set-budget"
-            class="mono"
-            inputMode="decimal"
-            autocomplete="off"
-            placeholder={t('setup.noBudget')}
-            value={budget}
-            // Sized to the text so "/ month" follows it, as in the design (mono digits are 1ch).
-            style={{ width: `calc(${Math.max(5, budget.length)}ch + 2px)` }}
-            onInput={(e) => setBudget(e.currentTarget.value)}
-            onBlur={saveBudget}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
-            }}
-          />
-          <span class="mono per">{t('setup.perMonth')}</span>
-        </div>
-      </div>
+      <DefaultsFields
+        budgetId="set-budget"
+        currency={s.currency}
+        onCurrency={(v) => void save({ currency: v })}
+        language={s.language}
+        onLanguage={(v) => void save({ language: v })}
+        budget={budget}
+        onBudget={setBudget}
+        onBudgetBlur={saveBudget}
+        blurOnEnter
+      />
     </Section>
   );
 }
@@ -322,7 +289,7 @@ function NotificationsSection() {
     setError(null);
     try {
       if (on) await enablePush(lang.value);
-      else await disablePush(rows);
+      else await disablePush();
       await refresh();
     } catch (err) {
       setError(err instanceof PushError && err.code === 'denied' ? 'settings.notifDenied' : 'settings.notifFailed');
@@ -349,7 +316,7 @@ function NotificationsSection() {
   const removeDevice = async (row: PushSubscriptionRow) => {
     setBusy(true);
     try {
-      if (sub && row.endpoint === sub.endpoint) await disablePush(rows);
+      if (sub && row.endpoint === sub.endpoint) await disablePush();
       else await api.pushDelete(row.id);
       await refresh();
     } catch {
@@ -506,7 +473,7 @@ function AccountSection() {
   const logout = async () => {
     setBusy(true);
     // This device should stop receiving this account's notifications once signed out.
-    await Promise.race([disablePushQuietly(), new Promise((r) => setTimeout(r, 2500))]);
+    await atMost(disablePushQuietly(), 2500);
     await api.logout().catch(() => undefined);
     signedOut();
     navigate('/login', { replace: true });
@@ -517,15 +484,17 @@ function AccountSection() {
     setBusy(true);
     setError(null);
     try {
-      await disablePushQuietly();
       await api.deleteAccount({ password: current });
-      forgetGeminiKey();
-      signedOut();
-      navigate('/signup', { replace: true });
     } catch (err) {
+      // Nothing changed, notifications on this device included.
       setBusy(false);
       setError(isApiError(err) && err.code === 'invalid_credentials' ? 'settings.wrongPassword' : 'settings.saveFailed');
+      return;
     }
+    await atMost(unsubscribeLocally(), 2500);
+    forgetGeminiKey();
+    signedOut();
+    navigate('/signup', { replace: true });
   };
 
   return (
@@ -613,15 +582,14 @@ function AccountSection() {
 }
 
 async function disablePushQuietly(): Promise<void> {
-  try {
-    if (!pushSupport().ok) return;
-    const sub = await currentSubscription();
-    if (!sub) return;
-    const { subscriptions } = await api.pushSubscriptions();
-    await disablePush(subscriptions);
-  } catch {
-    /* best effort: signing out must not depend on the push service */
-  }
+  if (!pushSupport().ok) return;
+  // Best effort: signing out must not depend on the push service.
+  await disablePush().catch(() => undefined);
+}
+
+/** Waits for `work`, but not longer than `ms`: leaving the account must not hang on the push service. */
+function atMost(work: Promise<unknown>, ms: number): Promise<unknown> {
+  return Promise.race([work, new Promise((resolve) => setTimeout(resolve, ms))]);
 }
 
 // ------------------------------------------------------------------ install

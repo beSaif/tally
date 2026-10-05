@@ -10,10 +10,10 @@ import {
   groupByDay,
   monthLong,
   monthShortYear,
-  normalizeMinute,
   periodLabel,
   signedPercent,
   sumCents,
+  totalsByCategory,
   weekRangeLabel,
   whenLabel,
 } from '@app/lib/format';
@@ -85,6 +85,17 @@ describe('grouping', () => {
 });
 
 describe('overview maths', () => {
+  it('totals entries per category, largest first, keeping uncategorised apart from a category called Other', () => {
+    const e = (category_name: string | null, amount_cents: number) => ({ category_name, amount_cents });
+    expect(totalsByCategory([e('Dining', 450), e(null, 1200), e('Groceries', 2340), e('Dining', 2100), e('Other', 100)])).toEqual([
+      { name: 'Dining', totalCents: 2550 },
+      { name: 'Groceries', totalCents: 2340 },
+      { name: null, totalCents: 1200 },
+      { name: 'Other', totalCents: 100 },
+    ]);
+    expect(totalsByCategory([])).toEqual([]);
+  });
+
   it('counts the days and months of a period that have started', () => {
     expect(elapsedDays({ from: '2026-10-01', to: '2026-10-31' }, TODAY)).toBe(5);
     expect(elapsedDays({ from: '2026-09-01', to: '2026-09-30' }, TODAY)).toBe(30);
@@ -104,14 +115,6 @@ describe('overview maths', () => {
 });
 
 describe('inputs', () => {
-  it('normalises what Gemini or a datetime input gives back', () => {
-    expect(normalizeMinute('2026-10-05T20:14', 'x')).toBe('2026-10-05T20:14');
-    expect(normalizeMinute('2026-10-05 20:14:33', 'x')).toBe('2026-10-05T20:14');
-    expect(normalizeMinute('2026-10-03', '2026-10-05T20:14')).toBe('2026-10-03T20:14');
-    expect(normalizeMinute('yesterday', '2026-10-05T20:14')).toBe('2026-10-05T20:14');
-    expect(normalizeMinute(null, 'fallback')).toBe('fallback');
-  });
-
   it('writes amounts for inputs without grouping', () => {
     expect(amountInputValue(2100)).toBe('21.00');
     expect(amountInputValue(128460)).toBe('1284.60');

@@ -229,6 +229,29 @@ test('a weekly summary click opens the week overview', async ({ page, context, b
   await expect(page.getByRole('tab', { name: 'Week' })).toHaveAttribute('aria-selected', 'true');
 });
 
+test('deleting the account: a wrong password leaves notifications on, the right one unsubscribes this browser', async ({ page, context, baseURL }) => {
+  await allowNotifications(context, new URL(baseURL ?? '').origin);
+  await prepare(page, { withKey: true, pushEndpoint: sink.endpointBase });
+  const account = await designAccount(page);
+  const sub = await enableOnThisDevice(page);
+  const listed = async () => ((await (await page.request.get('/api/push/subscriptions')).json()) as { subscriptions: Array<{ endpoint: string }> }).subscriptions;
+
+  await page.getByRole('button', { name: 'Delete account' }).click();
+  await page.getByLabel('Email', { exact: true }).last().fill(account.email);
+  await page.getByLabel('Password', { exact: true }).fill('not the password');
+  await page.getByRole('button', { name: 'Delete forever' }).click();
+  await expect(page.getByText('That password is not right.')).toBeVisible();
+  expect((await fakePushState(page)).sub?.endpoint).toBe(sub.endpoint);
+  expect((await listed()).map((s) => s.endpoint)).toEqual([sub.endpoint]);
+  await expect(page.getByRole('switch', { name: 'Notifications on this device' })).toHaveAttribute('aria-checked', 'true');
+
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByRole('button', { name: 'Delete forever' }).click();
+  await expect(page).toHaveURL(/\/signup$/);
+  expect((await fakePushState(page)).sub).toBeUndefined();
+  expect(await page.evaluate(() => localStorage.getItem('tally.push'))).toBeNull();
+});
+
 test('offline: the shell opens from the service worker and API calls say so', async ({ page, context }) => {
   await prepare(page, { withKey: true });
   await designAccount(page);

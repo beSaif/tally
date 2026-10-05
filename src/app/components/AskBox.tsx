@@ -10,7 +10,7 @@ import { lang, t } from '../i18n';
 import { answerSegments } from '../lib/answer';
 import { api, isAbortError } from '../lib/api';
 import { askData, GeminiError, type GeminiErrorCode } from '../lib/gemini';
-import { sumCents } from '../lib/format';
+import { sumCents, totalsByCategory } from '../lib/format';
 import { categoryNames, currency, geminiKey, model } from '../lib/store';
 import { linkTo } from '../router';
 import { IconSend } from './Icons';
@@ -71,8 +71,12 @@ export default function AskBox({ periodLabel, range, summary }: { periodLabel: s
           periodLabel,
           from: range.from,
           to: range.to,
+          // Until the period's summary has loaded, the entries just fetched give the same totals.
           totalCents: summary?.total_cents ?? sumCents(entries),
-          byCategory: (summary?.by_category ?? []).map((c) => ({ name: c.name ?? t('common.other'), totalCents: c.total_cents })),
+          byCategory: (summary ? summary.by_category.map((c) => ({ name: c.name, totalCents: c.total_cents })) : totalsByCategory(entries)).map((c) => ({
+            name: c.name ?? t('common.other'),
+            totalCents: c.totalCents,
+          })),
           entries: entries.map((e) => ({
             occurred_at: e.occurred_at,
             amount_cents: e.amount_cents,

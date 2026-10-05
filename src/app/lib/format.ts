@@ -138,6 +138,13 @@ export function sumCents(entries: ReadonlyArray<{ amount_cents: number }>): numb
   return entries.reduce((s, e) => s + e.amount_cents, 0);
 }
 
+/** Totals per category name, largest first, like the summary's by_category (null: uncategorised). */
+export function totalsByCategory(entries: ReadonlyArray<{ category_name: string | null; amount_cents: number }>): Array<{ name: string | null; totalCents: number }> {
+  const totals = new Map<string | null, number>();
+  for (const e of entries) totals.set(e.category_name, (totals.get(e.category_name) ?? 0) + e.amount_cents);
+  return [...totals].map(([name, totalCents]) => ({ name, totalCents })).sort((a, b) => b.totalCents - a.totalCents);
+}
+
 /** Days of the period that have started (the current period counts up to today). */
 export function elapsedDays(range: DayRange, today: string): number {
   if (today < range.from) return 0;
@@ -163,15 +170,6 @@ export function signedPercent(n: number): string {
   if (n > 0) return `+${n}`;
   if (n < 0) return `−${Math.abs(n)}`;
   return '0';
-}
-
-/** Accepts what Gemini or an input gives back and returns a valid 'YYYY-MM-DDTHH:MM' or the fallback. */
-export function normalizeMinute(value: string | null | undefined, fallback: string): string {
-  if (!value) return fallback;
-  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/.exec(value.trim());
-  if (m) return `${m[1]}T${m[2]}:${m[3]}`;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return `${value.trim()}T${fallback.slice(11, 16)}`;
-  return fallback;
 }
 
 /** Plain decimal for an amount input ("21.00"), never grouped so it round-trips through parseAmount. */

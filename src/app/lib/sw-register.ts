@@ -7,6 +7,7 @@ import { navigate } from '../router';
 import { translate, lang } from '../i18n';
 import { NAVIGATE_MESSAGE } from './sw-push';
 import { showToast } from './toast';
+import { onAppVisible } from './visible';
 
 let reloadRequested = false;
 
@@ -54,9 +55,7 @@ export function registerServiceWorker(): void {
         });
       });
       // Long-lived tabs (an installed PWA) still learn about new versions.
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') void reg.update().catch(() => undefined);
-      });
+      onAppVisible(() => void reg.update().catch(() => undefined));
     } catch {
       /* no worker (blocked, private mode): the app still works online */
     }

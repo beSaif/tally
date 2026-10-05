@@ -62,6 +62,33 @@ test('home: over budget turns the bar orange', async ({ page }) => {
   await expect(page.locator('.hero .fill')).toHaveClass(/acc/);
 });
 
+test('home: an entry saved into last month leaves this month alone and shows under "Show September →"', async ({ page }) => {
+  await prepare(page, { withKey: true });
+  await signUp(page, { settings: { setup_complete: true } });
+  await page.goto('/');
+  const empty = page.getByText('Nothing logged yet. Type a line or tap the mic.');
+  await expect(empty).toBeVisible();
+  const total = (await page.locator('.hero-num').textContent()) ?? '';
+  // A new account with an empty month: nothing further back to show yet.
+  await expect(page.getByRole('button', { name: /^Show / })).toHaveCount(0);
+
+  const composer = page.getByLabel('Describe an expense');
+  await composer.fill('Coffee 4.50');
+  await composer.press('Enter');
+  const sheet = page.getByRole('dialog', { name: 'New expense' });
+  await sheet.getByRole('button', { name: 'Edit', exact: true }).click();
+  await sheet.getByLabel('When').fill('2026-09-30T08:15');
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(sheet).toBeHidden();
+
+  // October's list and total are unchanged; the way to September appears and leads to the entry.
+  await expect(empty).toBeVisible();
+  await expect(page.locator('.hero-num')).toHaveText(total);
+  await page.getByRole('button', { name: 'Show September →' }).click();
+  await expect(page.getByRole('heading', { name: 'September 2026 · 4.50' })).toBeVisible();
+  await expect(page.locator('section.month .entries li')).toHaveText(/08:15\s*Coffee\s*Dining\s*4\.50/);
+});
+
 test('overview (A.3 + C.3): month, week, year, previous periods, deltas, ask', async ({ page }) => {
   const { gemini } = await prepare(page, { withKey: true });
   await designAccount(page);
@@ -117,6 +144,27 @@ test('overview (A.3 + C.3): month, week, year, previous periods, deltas, ask', a
   await shot(page, 'screen-overview-ask-full', { fullPage: true });
 });
 
+test('overview: a question asked before the totals load still sends the totals per category', async ({ page }) => {
+  const { gemini } = await prepare(page, { withKey: true });
+  await designAccount(page);
+  // A slow connection: the period's summary has not arrived when the question is asked.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/api\/summary\?/, async (route) => {
+    await held;
+    await route.continue().catch(() => undefined);
+  });
+  await page.goto('/overview');
+  await page.getByLabel('Ask your data').fill('Where did most of my money go this month?');
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(page.locator('.answer')).toHaveText(/Groceries led at 32%\.$/);
+  await expect(page.locator('.ov-total')).toHaveClass(/pending/);
+  const system = (gemini.generateBodies.at(-1)?.systemInstruction?.parts ?? []).map((p) => p.text ?? '').join('\n');
+  expect(system).toContain('By category:\n- Groceries 412.30 CHF\n- Dining 286.10 CHF\n- Bills 240.00 CHF\n- Transport 148.80 CHF\n- Fun 119.40 CHF\n- Shopping 78.00 CHF\n');
+  release();
+  await expect(page.locator('.ov-total')).not.toHaveClass(/pending/);
+});
+
 test('settings: every section', async ({ page }) => {
   await prepare(page, { withKey: true });
   const account = await designAccount(page);
@@ -165,6 +213,33 @@ test('settings: every section', async ({ page }) => {
   await forever.click();
   await expect(page).toHaveURL(/\/signup$/);
   expect((await page.request.get('/api/auth/me')).status()).toBe(401);
+});
+
+test('settings: the key is checked once when shown and once per model edit, never per keystroke', async ({ page }) => {
+  const { gemini } = await prepare(page, { withKey: true });
+  await signUp(page, { settings: { setup_complete: true } });
+  await page.goto('/settings');
+  const checked = () => gemini.requests.filter((r) => r.method === 'GET').map((r) => decodeURIComponent(new URL(r.url).pathname.split('/models/')[1] ?? ''));
+  const status = (text: string) => page.getByRole('status').filter({ hasText: text });
+  await expect(status('Key works · gemini-2.5-flash')).toBeVisible();
+  expect(checked()).toEqual(['gemini-2.5-flash']);
+
+  // A saved model change checks the saved key again, once.
+  const model = page.getByLabel('Model', { exact: true });
+  await model.fill('gemini-2.5-pro');
+  await model.press('Enter');
+  await expect(status('Key works · gemini-2.5-pro')).toBeVisible();
+  expect(checked()).toEqual(['gemini-2.5-flash', 'gemini-2.5-pro']);
+
+  // Typing a model while changing the key re-checks the new key once typing pauses.
+  await page.getByRole('button', { name: 'Change', exact: true }).first().click();
+  await page.getByLabel('Google AI Studio API key').fill(TEST_KEY);
+  await expect(status('Key works · gemini-2.5-pro')).toBeVisible();
+  const before = checked().length;
+  await model.fill('');
+  await model.pressSequentially('gemini-2.5-flash-lite', { delay: 30 });
+  await expect(status('Key works · gemini-2.5-flash-lite')).toBeVisible();
+  expect(checked().slice(before)).toEqual(['gemini-2.5-flash-lite']);
 });
 
 test('setup (00.1, 00.2) and sign-in screens', async ({ page }) => {

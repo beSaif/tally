@@ -258,6 +258,28 @@ test.describe('without microphone permission', () => {
   });
 });
 
+test.describe('a microphone that cannot start', () => {
+  test('says so, and Escape, Close and Try again still work', async ({ page }) => {
+    // What a browser reports when the device is busy or fails to open (not a cancel of ours).
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Starting audio failed', 'AbortError'));
+    });
+    await home(page);
+    const sheet = sheetOf(page);
+    await pressMic(page, { holdMs: 100 });
+    await expect(sheet.getByRole('alert')).toHaveText('The microphone could not start.');
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+
+    await pressMic(page, { holdMs: 100 });
+    await sheet.getByRole('button', { name: 'Try again' }).click();
+    await expect(sheet.getByRole('alert')).toHaveText('The microphone could not start.');
+    await sheet.getByRole('button', { name: 'Close' }).click();
+    await expect(sheet).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Record a voice note' })).toHaveAttribute('aria-pressed', 'false');
+  });
+});
+
 test('entry sheet: edit, delete with confirm, undo (§3.7)', async ({ page }) => {
   await home(page);
   const row = page.locator('.entries li', { hasText: 'Migros lunch' });

@@ -2,8 +2,9 @@
  * Web Push on this device (spec §8.1): support detection, permission, PushManager subscription and
  * keeping the server's copy (language, time zone) current.
  */
-import type { PushSubscriptionRow, ResolvedLanguage } from '@shared/api';
-import { api } from './api';
+import type { ResolvedLanguage } from '@shared/api';
+import { api, isApiError } from './api';
+import { fromBase64Url } from './sw-push';
 import { isIOSDevice } from './ua';
 
 export type PushSupport = { ok: true } | { ok: false; reason: 'unsupported' | 'ios-install' };
@@ -38,14 +39,6 @@ export function pushSupport(): PushSupport {
 
 export function permission(): NotificationPermission {
   return 'Notification' in window ? Notification.permission : 'denied';
-}
-
-export function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
-  const raw = atob(padded);
-  const out = new Uint8Array(new ArrayBuffer(raw.length));
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
 }
 
 const timeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -104,7 +97,7 @@ export async function shareLanguageWithWorker(language: ResolvedLanguage): Promi
 function sameServerKey(current: ArrayBuffer | null | undefined, key: string): boolean {
   if (!current) return true; // unknown: assume it matches rather than churn subscriptions
   const a = new Uint8Array(current);
-  const b = urlBase64ToUint8Array(key);
+  const b = fromBase64Url(key);
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
@@ -125,10 +118,12 @@ async function sync(sub: PushSubscription, language: ResolvedLanguage): Promise<
 /** Asks for permission, subscribes this browser and registers it with the server. */
 export async function enablePush(language: ResolvedLanguage): Promise<{ id: string; endpoint: string }> {
   if (!pushSupport().ok) throw new PushError('unsupported');
-  const result = await Notification.requestPermission();
-  if (result !== 'granted') throw new PushError('denied');
+  // Without a service worker nothing could receive a push: say so before asking for a permission
+  // that could not be used.
   const reg = await registration();
   if (!reg) throw new PushError('unsupported');
+  const result = await Notification.requestPermission();
+  if (result !== 'granted') throw new PushError('denied');
   try {
     const { key } = await api.vapidKey();
     let sub = await reg.pushManager.getSubscription();
@@ -136,7 +131,7 @@ export async function enablePush(language: ResolvedLanguage): Promise<{ id: stri
       await sub.unsubscribe().catch(() => false);
       sub = null;
     }
-    sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+    sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromBase64Url(key) });
     const id = await sync(sub, language);
     return { id, endpoint: sub.endpoint };
   } catch (err) {
@@ -145,18 +140,43 @@ export async function enablePush(language: ResolvedLanguage): Promise<{ id: stri
   }
 }
 
-/** Unsubscribes this browser and removes it from the server. */
-export async function disablePush(rows: readonly PushSubscriptionRow[]): Promise<void> {
+/**
+ * This device's row on the server: the id stored when it last registered, else (no stored id, or
+ * one for an endpoint the browser has since replaced) found by endpoint in the account's devices.
+ */
+async function serverId(sub: PushSubscription | null): Promise<string | null> {
+  const meta = readMeta();
+  if (meta && (!sub || meta.endpoint === sub.endpoint)) return meta.id;
+  if (!sub) return null;
+  const { subscriptions } = await api.pushSubscriptions();
+  return subscriptions.find((r) => r.endpoint === sub.endpoint)?.id ?? null;
+}
+
+/**
+ * Unsubscribes this browser and removes it from the server. The stored id is forgotten only once
+ * the server has let go of the row, so a failed delete is retried by the next call (e.g. logout).
+ */
+export async function disablePush(): Promise<void> {
   const sub = await currentSubscription();
-  const id = rows.find((r) => sub && r.endpoint === sub.endpoint)?.id ?? readMeta()?.id;
+  const id = await serverId(sub);
   if (sub) await sub.unsubscribe().catch(() => false);
-  writeMeta(null);
   if (id) {
     await api.pushDelete(id).catch((err: unknown) => {
       // Already gone on the server is fine.
-      if (!(err instanceof Error && 'code' in err && (err as { code: string }).code === 'not_found')) throw err;
+      if (!(isApiError(err) && err.code === 'not_found')) throw err;
     });
   }
+  writeMeta(null);
+}
+
+/**
+ * The account was deleted, and its device rows with it: only this browser's own subscription and
+ * the stored id are left to drop. There is no session left to ask the server with, nor a need to.
+ */
+export async function unsubscribeLocally(): Promise<void> {
+  const sub = await currentSubscription().catch(() => null);
+  if (sub) await sub.unsubscribe().catch(() => false);
+  writeMeta(null);
 }
 
 /**

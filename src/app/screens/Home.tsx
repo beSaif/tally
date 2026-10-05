@@ -8,6 +8,7 @@ import { monthLong, monthLongYear, monthShortYear, sumCents, todayLocal } from '
 import { offerInstallOnce } from '../lib/install';
 import { freshIds, loadCurrentMonth, loadOlderMonth, months, nextOlderMonth, type MonthBlock } from '../lib/ledger';
 import { currency, settings } from '../lib/store';
+import { onAppVisible } from '../lib/visible';
 import { navigate, route, setQuery } from '../router';
 import CaptureSheet from '../components/CaptureSheet';
 import Composer from '../components/Composer';
@@ -17,8 +18,6 @@ import Hero from '../components/Hero';
 import { IconGear } from '../components/Icons';
 import Wordmark from '../components/Wordmark';
 
-const REFRESH_GAP_MS = 2000;
-
 export default function Home() {
   const [open, setOpen] = useState<Entry | null>(null);
   const today = todayLocal();
@@ -27,19 +26,8 @@ export default function Home() {
 
   useEffect(() => {
     void loadCurrentMonth();
-    let last = performance.now();
-    // Another device may have logged something: refetch when the tab comes back.
-    const refresh = () => {
-      if (document.visibilityState !== 'visible' || performance.now() - last < REFRESH_GAP_MS) return;
-      last = performance.now();
-      void loadCurrentMonth();
-    };
-    document.addEventListener('visibilitychange', refresh);
-    window.addEventListener('focus', refresh);
-    return () => {
-      document.removeEventListener('visibilitychange', refresh);
-      window.removeEventListener('focus', refresh);
-    };
+    // Another device may have logged something: refetch when the app comes back to the front.
+    return onAppVisible(() => void loadCurrentMonth());
   }, []);
 
   useEffect(() => {

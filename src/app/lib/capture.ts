@@ -4,13 +4,13 @@
  */
 import { signal } from '@preact/signals';
 import type { EntrySource, NewEntry } from '@shared/api';
-import { isValidMinute, toLocalMinute } from '@shared/dates';
+import { isValidMinute } from '@shared/dates';
 import { parseAmount } from '@shared/money';
 import { GeminiError, parseExpenses, type GeminiErrorCode, type ParseInput, type ParsedEntry } from './gemini';
 import { Recorder } from './audio';
 import { api } from './api';
 import { BAR_COUNT, LevelMeter, loudness, voiceprint } from './bars';
-import { amountInputValue, normalizeMinute } from './format';
+import { amountInputValue } from './format';
 import { addEntries } from './ledger';
 import { categoryIdFor, categoryNames, currency, geminiKey, model } from './store';
 import { lang, type TKey } from '../i18n';
@@ -117,11 +117,12 @@ export async function startRecording(gesture: Gesture = 'pending'): Promise<void
       if (history.length < MAX_HISTORY) history.push(loudness(l));
     });
   } catch (err) {
+    // Cancelled while the permission prompt was up: finishRecording already let go of `rec`.
     if (recorder !== rec) return;
     recorder = null;
     const name = err instanceof Error || err instanceof DOMException ? err.name : '';
-    // AbortError: cancelled while the permission prompt was up; nothing to report.
-    if (name === 'AbortError') return;
+    // Anything else is a real failure, AbortError included (the device could not be opened). The
+    // sheet must leave "recording": with no recorder left, nothing else could close it.
     capture.value = { kind: 'error', input: null, code: name === 'NotAllowedError' || name === 'SecurityError' ? 'micDenied' : 'mic' };
     return;
   }
@@ -196,16 +197,16 @@ function toParseInput(input: CaptureInput): ParseInput {
 
 let draftSeq = 0;
 
-function toDraft(p: ParsedEntry, now: string): Draft {
-  const code = (p.currency || '').trim().toUpperCase();
+/** parseExpenses already normalised the entry (whole cents ≥ 0, a valid minute, a 3-letter currency). */
+function toDraft(p: ParsedEntry): Draft {
   return {
     key: `d${++draftSeq}`,
-    amount: amountInputValue(Math.max(0, Math.round(p.amount_cents))),
-    description: p.description.trim(),
+    amount: amountInputValue(p.amount_cents),
+    description: p.description,
     categoryId: categoryIdFor(p.category),
-    occurredAt: normalizeMinute(p.occurred_at, now),
-    note: p.note?.trim() ?? '',
-    currency: /^[A-Z]{3}$/.test(code) ? code : currency.value,
+    occurredAt: p.occurred_at,
+    note: p.note ?? '',
+    currency: p.currency,
     checked: true,
   };
 }
@@ -222,12 +223,11 @@ async function run(input: CaptureInput): Promise<void> {
     return;
   }
   try {
-    const now = new Date();
     const result = await parseExpenses(
       { apiKey, model: model.value },
       toParseInput(input),
       {
-        now,
+        now: new Date(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         currency: currency.value,
         language: lang.value,
@@ -245,12 +245,11 @@ async function run(input: CaptureInput): Promise<void> {
       restoreText = input.text;
       composerText.value = '';
     }
-    const nowMinute = toLocalMinute(now);
     capture.value = {
       kind: 'result',
       input,
       transcript: result.transcript,
-      drafts: result.entries.map((p) => toDraft(p, nowMinute)),
+      drafts: result.entries.map(toDraft),
       editing: [],
       before: null,
       saving: false,
