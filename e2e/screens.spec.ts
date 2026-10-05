@@ -223,3 +223,53 @@ test('sign-up screen when the server asks for an invite code', async ({ page }) 
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page).toHaveURL(/\/setup$/);
 });
+
+test('install: Settings uses the captured prompt; the first log offers it once', async ({ page }) => {
+  await prepare(page, { withKey: true });
+  await designAccount(page);
+  await page.goto('/');
+  await expect(page.locator('.hero-num')).toHaveText('1 284.60');
+  // What Chromium fires when the app is installable (it does not, headless).
+  await page.evaluate(() => {
+    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: async () => {
+        (window as unknown as { __prompted: number }).__prompted = ((window as unknown as { __prompted?: number }).__prompted ?? 0) + 1;
+      },
+      userChoice: Promise.resolve({ outcome: 'dismissed' as const }),
+    });
+    window.dispatchEvent(event);
+  });
+
+  await page.getByLabel('Describe an expense').fill('Coffee 4.50');
+  await page.getByLabel('Describe an expense').press('Enter');
+  await page.getByRole('dialog', { name: 'New expense' }).getByRole('button', { name: 'Save', exact: true }).click();
+  const toast = page.locator('.toast');
+  await expect(toast).toContainText('Add Tally to your Home Screen');
+  await shot(page, 'screen-home-install-toast');
+  await toast.getByRole('button', { name: 'Install' }).click();
+  expect(await page.evaluate(() => (window as unknown as { __prompted?: number }).__prompted)).toBe(1);
+
+  // A prompt can be used once; a new one (the browser fires it again) shows in Settings.
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+        prompt: async () => {
+          (window as unknown as { __prompted: number }).__prompted++;
+        },
+        userChoice: Promise.resolve({ outcome: 'accepted' as const }),
+      }),
+    );
+  });
+  await page.locator('.topline .ibtn').click();
+  await page.getByRole('button', { name: 'Install Tally' }).click();
+  expect(await page.evaluate(() => (window as unknown as { __prompted?: number }).__prompted)).toBe(2);
+  await expect(page.getByRole('button', { name: 'Install Tally' })).toHaveCount(0);
+
+  // Offered once per device only.
+  await page.goto('/');
+  await page.getByLabel('Describe an expense').fill('Coffee 3.80');
+  await page.getByLabel('Describe an expense').press('Enter');
+  await page.getByRole('dialog', { name: 'New expense' }).getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.entries li.fresh')).toContainText('3.80');
+  await expect(toast).toHaveCount(0);
+});

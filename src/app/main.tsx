@@ -6,7 +6,7 @@ import { t } from './i18n';
 import { setApiHandlers } from './lib/api';
 import { initInstall } from './lib/install';
 import { bootstrap, signedOut } from './lib/store';
-import { announceUpdate, registerServiceWorker } from './lib/sw-register';
+import { registerServiceWorker } from './lib/sw-register';
 import { showToast } from './lib/toast';
 import { navigate } from './router';
 
@@ -23,15 +23,8 @@ window.addEventListener('offline', () => showToast({ text: t('toast.offline') })
 
 initInstall();
 
-if (import.meta.env.PROD) {
-  registerServiceWorker();
-} else {
-  // Development only: lets the visual tests preview states that need a real deployment.
-  (window as Window & { __tally?: unknown }).__tally = {
-    announceUpdate: () => announceUpdate(null),
-    toast: (text: string) => showToast({ text }),
-  };
-}
+// The Vite dev server has no service worker (it would cache stale modules); the build registers it.
+if (import.meta.env.PROD) registerServiceWorker();
 
 const root = document.getElementById('app');
 if (root) render(<App />, root);
