@@ -8,6 +8,7 @@ import { isValidMinute } from '@shared/dates';
 import { parseAmount } from '@shared/money';
 import { GeminiError, parseExpenses, type GeminiErrorCode, type ParseInput, type ParsedEntry } from './gemini';
 import { Recorder } from './audio';
+import { micPermission, type MicPermission } from './mic';
 import { api } from './api';
 import { BAR_COUNT, LevelMeter, loudness, voiceprint } from './bars';
 import { amountInputValue } from './format';
@@ -18,6 +19,14 @@ import { lang, type TKey } from '../i18n';
 export const MAX_RECORDING_MS = 60_000;
 /** Shorter than this is almost always an accidental tap: nothing useful to send. */
 const MIN_RECORDING_MS = 500;
+/** A press released sooner than this is a tap: keep listening until tapped again. */
+const TAP_MS = 300;
+/**
+ * Without a Permissions API answer, a microphone that takes longer than this to start while the
+ * press is still undecided was almost certainly held up by a permission prompt, and the prompt
+ * took the press with it: nobody is holding the button any more.
+ */
+const PROMPT_MS = 1000;
 /** Loudness frames kept for the voice-note shape (60 s at 60 fps). */
 const MAX_HISTORY = 3600;
 
@@ -100,6 +109,9 @@ function inputOf(state: CaptureState): CaptureInput | null {
 /**
  * Starts listening. Call it synchronously from the pointerdown handler: the Recorder creates its
  * AudioContext and asks for the microphone inside that user gesture.
+ *
+ * A permission prompt takes the press with it (on iPhone no release ever reaches the page), so a
+ * press that is going to prompt switches to tap mode at once: the sheet's buttons end it instead.
  */
 export async function startRecording(gesture: Gesture = 'pending'): Promise<void> {
   if (capture.value.kind !== 'idle') return;
@@ -110,6 +122,14 @@ export async function startRecording(gesture: Gesture = 'pending'): Promise<void
   levels.value = new Array<number>(BAR_COUNT).fill(0);
   elapsedMs.value = 0;
   capture.value = { kind: 'recording', gesture, cancelArmed: false, starting: true };
+  const pressedAt = performance.now();
+  let permission: MicPermission = 'unknown';
+  if (gesture === 'pending') {
+    void micPermission().then((state) => {
+      permission = state;
+      if (recorder === rec && (state === 'prompt' || state === 'denied')) keepListening();
+    });
+  }
   try {
     await rec.start((l) => {
       if (recorder !== rec) return;
@@ -132,19 +152,45 @@ export async function startRecording(gesture: Gesture = 'pending'): Promise<void
   }
   recordStart = performance.now();
   const s = capture.value;
-  if (s.kind === 'recording') capture.value = { ...s, starting: false };
+  if (s.kind === 'recording') {
+    // No answer from the Permissions API: a slow start is the next best sign that a prompt took the press.
+    const taken = s.gesture === 'pending' && permission === 'unknown' && recordStart - pressedAt > PROMPT_MS;
+    capture.value = { ...s, starting: false, gesture: taken ? 'tap' : s.gesture };
+  }
   tickTimer = setInterval(() => (elapsedMs.value = performance.now() - recordStart), 200);
   maxTimer = setTimeout(() => void finishRecording(true), MAX_RECORDING_MS);
 }
 
-export function setGesture(gesture: Gesture): void {
+/**
+ * The press that started the recording ended after `heldMs` (pointerup). A quick press, a release
+ * while the microphone was still starting (a permission prompt was up), or tap mode already: keep
+ * listening until tapped again. A hold sends, or cancels when the finger had slid up.
+ */
+export function releaseRecording(heldMs: number): void {
   const s = capture.value;
-  if (s.kind === 'recording' && s.gesture !== gesture) capture.value = { ...s, gesture };
+  if (s.kind !== 'recording') return;
+  if (s.gesture === 'tap' || s.starting || heldMs < TAP_MS) {
+    keepListening();
+    return;
+  }
+  capture.value = { ...s, gesture: 'hold' };
+  void finishRecording(!s.cancelArmed);
 }
 
+/**
+ * The press can no longer end the recording: the system took it (pointercancel: a permission
+ * prompt, a call, …) or is about to. Keep listening until tapped, with the sheet's buttons.
+ */
+export function keepListening(): void {
+  const s = capture.value;
+  if (s.kind !== 'recording' || s.gesture === 'tap') return;
+  capture.value = { ...s, gesture: 'tap', cancelArmed: false };
+}
+
+/** Sliding up arms "release to cancel"; meaningless in tap mode, where nothing is held. */
 export function setCancelArmed(armed: boolean): void {
   const s = capture.value;
-  if (s.kind === 'recording' && s.cancelArmed !== armed) capture.value = { ...s, cancelArmed: armed };
+  if (s.kind === 'recording' && s.gesture !== 'tap' && s.cancelArmed !== armed) capture.value = { ...s, cancelArmed: armed };
 }
 
 export async function finishRecording(send: boolean): Promise<void> {

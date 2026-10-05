@@ -50,6 +50,7 @@ tally/
     lib/api.ts            typed fetch client for /api
     lib/gemini.ts         Gemini client (text / audio / image → entries; ask-your-data; key check)
     lib/audio.ts          MediaRecorder + WAV re-encoding (16 kHz mono 16-bit)
+    lib/mic.ts            will the microphone prompt? (Permissions API)
     lib/image.ts          receipt photo downscale → JPEG
     lib/push.ts           permission + PushManager subscribe/unsubscribe + server sync
     lib/store.ts          app state (@preact/signals)
@@ -504,6 +505,7 @@ Recorded after the build so the spec stays honest. Each item is deliberate.
 
 - **Voice result header** (§3.5): after Gemini answers, the sheet keeps the A.2 header and wave but reads "VOICE NOTE · 0:06" with a × and a grey wave, because orange marks only a live recording. Text results carry a "You wrote" label and photo results a "Receipt photo" label (C.2 style).
 - **Tap mode** (§3.4): the sheet covers the composer (as in A.2), so "tap the mic again" is not reachable; a "■ Stop & send" button in the sheet does it. A "↑ Slide up to cancel" hint shows in hold mode.
+- **The mic press and the permission prompt** (§3.4): the prompt takes the press with it (on iPhone no release reaches the page), so a press that is going to prompt (the Permissions API answers anything but `granted`, `lib/mic.ts`) goes to tap mode at once, with Cancel / Stop & send on the sheet; without an answer (older Safari, Firefox), a microphone that starts more than 1 s after the press, still undecided, is treated the same. A `pointercancel` keeps listening in tap mode instead of discarding the note. The mic button keeps `touch-action: none` so a finger drift during a hold is not a scroll. iOS asks a Home Screen web app at every launch, and again a while after the microphone was released; Tally does not hold the microphone between notes to get around that.
 - **Deltas** (§3.6): a 0% delta is shown whenever the previous period had a total for that category.
 - **Inputs** are 16px where the design draws 14px, so iOS does not zoom on focus; with the viewport locked (§9 / native feel) this is belt and braces.
 - **Notification click**: an open Tally window is routed in-app through a message instead of `client.navigate` (no reload). Notification URLs are limited to the app's own paths.

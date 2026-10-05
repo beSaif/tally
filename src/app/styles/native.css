@@ -29,6 +29,11 @@ a,
 .tabs button {
   touch-action: manipulation; /* kills the double-tap delay and zoom on controls */
 }
+/* The mic is held and slid (hold to talk, slide up to cancel): the browser must not claim that
+   touch for a scroll, or the press is cancelled mid-sentence. */
+.ibtn.mic {
+  touch-action: none;
+}
 img,
 svg {
   -webkit-user-drag: none;
