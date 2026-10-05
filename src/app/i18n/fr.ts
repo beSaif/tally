@@ -1,8 +1,8 @@
 import type { Dict } from './en';
 
 /**
- * French UI strings. French typography: a narrow no-break space (U+202F) before `:` `?` `!` `%`
- * and inside « guillemets ». Written as ` ` escapes so the rule stays visible in review.
+ * French UI strings. French typography: a narrow no-break space (U+202F, invisible in most
+ * editors) before `:` `?` `!` `%` and inside « guillemets ». tests/unit/i18n.test.ts checks it.
  */
 export const fr: Dict = {
   // ---- common ----
