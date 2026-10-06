@@ -193,8 +193,8 @@ test('sign in, log, edit, delete, overview, export, ask, notifications, log out 
   await device.click();
   await expect(device).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByText('This device', { exact: true })).toBeVisible();
+  // The daily reminder is on from the start; only its time is changed here.
   const reminder = page.getByRole('switch', { name: 'Daily reminder' });
-  await reminder.click();
   await expect(reminder).toHaveAttribute('aria-checked', 'true');
   await page.getByLabel('Reminder time').fill('21:15');
   await page.getByLabel('Reminder time').blur();

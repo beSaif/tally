@@ -10,7 +10,7 @@ const DEFAULTS: Omit<Settings, 'updated_at'> = {
   model: DEFAULT_MODEL,
   setup_complete: false,
   notifications: {
-    reminder: false,
+    reminder: true,
     reminder_time: '20:30',
     reminder_only_if_empty: true,
     budget: true,

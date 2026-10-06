@@ -84,8 +84,11 @@ export function notificationFor(p: PushPayload): { title: string; options: Notif
       icon: ICON,
       badge: BADGE,
       lang: p.lang,
-      // The tag replaces an older notification of the same kind quietly instead of buzzing again.
-      renotify: false,
+      // The tag makes a new message of a kind replace the older one still in the tray, and the
+      // replacement must still alert: a reminder that quietly swaps in for yesterday's goes
+      // unnoticed. iOS shows same-tag notifications side by side and ignores renotify (WebKit
+      // bug 258922), so there this changes nothing.
+      renotify: true,
       ...(p.actions?.length ? { actions: p.actions.map((a) => ({ action: a.action, title: a.title })) } : {}),
     },
   };

@@ -96,7 +96,7 @@ describe('notificationFor', () => {
       icon: ICON,
       badge: BADGE,
       lang: 'en',
-      renotify: false,
+      renotify: true,
       actions: REMINDER.actions,
     });
   });

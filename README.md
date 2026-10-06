@@ -129,9 +129,22 @@ Configuration (`wrangler.jsonc` vars / secrets):
 
 Enable them in **Settings → Notifications** on each device. Android and desktop browsers work
 directly; on iPhone/iPad, add Tally to the Home Screen first (Share → Add to Home Screen), then
-enable notifications from the installed app (iOS 16.4+). Reminders arrive at the first quarter-hour check at or after your time (never early). Reminder time and the notification kinds
-are account-wide; subscriptions are per device and can be removed from the device list. The
-"Skip today" action on a reminder silences that day's reminder.
+enable notifications from the installed app (iOS 16.4+).
+
+Tally is quiet by design: nothing goes out on a timer every hour. With everything on (the
+defaults), this is all that arrives:
+
+| Notification | When | Only if |
+| --- | --- | --- |
+| Daily reminder | at your reminder time (20:30 by default), at the first quarter-hour check at or after it, never early | nothing was logged that day ("Only if nothing was logged", on by default) and the day was not skipped |
+| Budget alerts | right after an entry takes the month past 50 %, 80 % or 100 % of the budget; the highest threshold crossed, once per month each | a monthly budget is set |
+| Weekly summary | Monday 09:00 | at least one entry last week |
+| Monthly report | the 1st of the month at 09:00 | at least one entry last month |
+| Test | the button in Settings | — |
+
+For a reminder every evening, turn off "Only if nothing was logged". Reminder time and the
+notification kinds are account-wide; subscriptions are per device and can be removed from the
+device list. The "Skip today" action on a reminder silences that day's reminder.
 
 ## Privacy and security
 
