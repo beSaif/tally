@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Minimal, AI-assisted expense tracker. PWA on Cloudflare Workers + D1; Gemini from the device.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "mkdir -p dist && concurrently -k -n vite,worker -c cyan,magenta \"vite\" \"npm run dev:worker\"",
