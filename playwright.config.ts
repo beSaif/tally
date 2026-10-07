@@ -8,6 +8,8 @@ import { FAKE_GOOGLE_CLIENT_ID, FAKE_GOOGLE_PORT } from './e2e/support/fake-goog
  * (e2e/support/fake-push.ts + push-sink.ts). Screenshots of every screen and state go to
  * e2e/__screenshots__/ (390×844 @2x). A server already listening on E2E_PORT is reused locally;
  * it must serve a fresh `npm run build` and have been started with the same `--var` flags.
+ * `--local-upstream` keeps requests under 127.0.0.1: wrangler dev otherwise presents them under the
+ * custom-domain route in wrangler.jsonc, and the Worker builds the Google callback from that host.
  */
 const PORT = Number(process.env.E2E_PORT ?? 8787);
 const baseURL = `http://127.0.0.1:${PORT}`;
@@ -47,7 +49,7 @@ export default defineConfig({
   },
   projects: [{ name: 'e2e' }],
   webServer: {
-    command: `npm run vapid && npm run build && npm run db:migrate:local && npx wrangler dev --port ${PORT} --test-scheduled ${GOOGLE_VARS}`,
+    command: `npm run vapid && npm run build && npm run db:migrate:local && npx wrangler dev --port ${PORT} --test-scheduled --local-upstream 127.0.0.1:${PORT} ${GOOGLE_VARS}`,
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
