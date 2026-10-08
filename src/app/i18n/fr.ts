@@ -181,7 +181,8 @@ export const fr: Dict = {
   'overview.stats_other': '{count} dépenses · moy. {avg} / jour',
   'overview.statsYear': 'Moy. {avg} / mois',
   'overview.delta': '{delta} %',
-  'overview.deltaLabel': '{delta} % par rapport à la période précédente',
+  'overview.deltaLabel': '{delta} % par rapport à {period}',
+  'overview.compared': 'Évolution par rapport à {period}',
   'overview.export': 'Exporter en CSV →',
   'overview.empty': 'Rien de noté sur cette période.',
   'overview.loadFailed': 'Impossible de charger cette période.',
@@ -194,6 +195,10 @@ export const fr: Dict = {
   'overview.shareLabel': '{share} % du total',
   'overview.openCategory': '{name} : dépenses et tendance',
   'overview.report': 'Rapport · {month} →',
+  'overview.split': 'Fixe {fixed} · Courant {daily}',
+  'overview.uncategorised_one': '{count} dépense sans catégorie · La classer →',
+  'overview.uncategorised_other': '{count} dépenses sans catégorie · Les classer →',
+  'overview.budgetMark': 'Budget {budget}',
 
   // ---- category (analytics drill-down) ----
   'category.ofPeriod': '{share} % de {period}',
@@ -201,6 +206,16 @@ export const fr: Dict = {
   'category.entries_other': '{count} dépenses',
   'category.trend': '6 derniers mois',
   'category.loadFailed': 'Impossible de charger ces dépenses.',
+  'category.avg': 'moy. {amount}',
+  'category.budget': 'Budget mensuel',
+  'category.noBudget': 'Aucun',
+  'category.setBudget': 'Définir',
+  'category.budgetPlaceholder': 'p. ex. 250',
+  'category.left': '{amount} restants',
+  'category.over': '{amount} de dépassement',
+  'category.fixed': 'Charge fixe',
+  'category.fixedHint': 'Loyer, factures, abonnements : comptés à part des dépenses courantes.',
+  'category.otherHint': 'Touchez une dépense pour lui donner une catégorie.',
 
   // ---- monthly report ----
   'report.title': 'Rapport',
@@ -220,6 +235,9 @@ export const fr: Dict = {
   'report.pdf': 'Enregistrer en PDF',
   'report.empty': 'Rien de noté en {month}.',
   'report.loadFailed': 'Impossible de charger ce rapport.',
+  'report.summarize': 'Résumer avec Gemini',
+  'report.summaryThinking': 'Gemini écrit',
+  'report.summaryLabel': 'Résumé',
 
   // ---- settings ----
   'settings.title': 'Réglages',

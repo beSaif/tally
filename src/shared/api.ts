@@ -50,6 +50,16 @@ export interface Category {
   id: string;
   name: string;
   position: number;
+  /** Monthly budget for this category; null when none is set. */
+  budget_cents: number | null;
+  /** A fixed cost (rent, bills) rather than day-to-day spending. */
+  fixed: boolean;
+}
+
+/** `PATCH /api/categories/:id`: a category's budget and fixed-cost flag (names go through PUT). */
+export interface CategoryPatch {
+  budget_cents?: number | null;
+  fixed?: boolean;
 }
 
 export interface CategoriesInput {

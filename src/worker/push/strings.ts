@@ -59,6 +59,7 @@ interface Dict {
   test: NotificationText;
   months: readonly string[];
   budgetTitle(threshold: number): string;
+  categoryBudgetTitle(name: string, threshold: number): string;
   daysLeft(n: number): string;
   budgetBody(spent: string, budget: string, currency: string, daysLeft: string): string;
   entries(n: number): string;
@@ -79,6 +80,7 @@ const en: Dict = {
   test: { title: 'Notifications are on', body: 'This is how Tally will nudge you.' },
   months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
   budgetTitle: (t) => (t === 50 ? 'Halfway through your budget' : t >= 100 ? 'Budget reached' : `${t}% of your budget`),
+  categoryBudgetTitle: (name, t) => (t === 50 ? `${name}: halfway through its budget` : t >= 100 ? `${name}: budget reached` : `${name}: ${t}% of its budget`),
   daysLeft: (n) => (n <= 0 ? 'last day of the month' : n === 1 ? '1 day left' : `${n} days left`),
   budgetBody: (spent, budget, currency, daysLeft) => `${spent} of ${budget} ${currency} · ${daysLeft}`,
   entries: (n) => (n === 1 ? '1 entry' : `${n} entries`),
@@ -97,6 +99,8 @@ const fr: Dict = {
   test: { title: 'Notifications activées', body: 'Voici comment Tally vous fera signe.' },
   months: ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'],
   budgetTitle: (t) => (t === 50 ? 'La moitié du budget est atteinte' : t >= 100 ? 'Budget atteint' : `${t}${NNBSP}% du budget`),
+  categoryBudgetTitle: (name, t) =>
+    t === 50 ? `${name}${NNBSP}: la moitié du budget est atteinte` : t >= 100 ? `${name}${NNBSP}: budget atteint` : `${name}${NNBSP}: ${t}${NNBSP}% du budget`,
   daysLeft: (n) => (n <= 0 ? 'dernier jour du mois' : n === 1 ? '1 jour restant' : `${n} jours restants`),
   budgetBody: (spent, budget, currency, daysLeft) => `${spent} sur ${budget} ${currency} · ${daysLeft}`,
   entries: (n) => (n === 1 ? '1 dépense' : `${n} dépenses`),
@@ -127,6 +131,15 @@ export function budgetText(lang: ResolvedLanguage, input: BudgetTextInput): Noti
   const d = dict(lang);
   return {
     title: d.budgetTitle(input.threshold),
+    body: d.budgetBody(formatAmount(input.spentCents), formatBudget(input.budgetCents), input.currency, d.daysLeft(input.daysLeft)),
+  };
+}
+
+/** "Dining: 80% of its budget" · "201.00 of 250 CHF · 17 days left". */
+export function categoryBudgetText(lang: ResolvedLanguage, input: BudgetTextInput & { category: string }): NotificationText {
+  const d = dict(lang);
+  return {
+    title: d.categoryBudgetTitle(input.category, input.threshold),
     body: d.budgetBody(formatAmount(input.spentCents), formatBudget(input.budgetCents), input.currency, d.daysLeft(input.daysLeft)),
   };
 }

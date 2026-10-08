@@ -1,20 +1,22 @@
 /**
  * Monthly report (`/report?m=YYYY-MM`): a month's total against the budget and the month before,
- * its categories, biggest expenses and the six months up to it. The first-of-month notification
- * opens last month's; "Save as PDF" prints it (print styles drop the app chrome).
+ * fixed vs day-to-day, a Gemini summary on request, its categories, biggest expenses and the six
+ * months up to it against their average. The first-of-month notification opens last month's; "Save as PDF" prints it (print styles drop the app chrome).
  */
 import { useEffect, useState } from 'preact/hooks';
 import type { Entry, MonthsSummary, Summary } from '@shared/api';
-import { addMonths, monthRange, previousRange } from '@shared/dates';
+import { addMonths, comparableRange, monthRange, previousRange } from '@shared/dates';
 import { formatAmount, formatBudget, percentOf } from '@shared/money';
 import { lang, t } from '../i18n';
 import { api, isAbortError } from '../lib/api';
-import { biggestEntries, busiestDay, monthPoints, reportMonth, TREND_MONTHS } from '../lib/analytics';
-import { dayShortMonth, deltaPercent, elapsedDays, monthLong, monthLongYear, signedPercent, todayLocal, weekdayAndDay } from '../lib/format';
-import { currency, settings } from '../lib/store';
+import { averageCents, biggestEntries, busiestDay, monthPoints, reportMonth, splitFixed, TREND_MONTHS } from '../lib/analytics';
+import { arrowPercent, comparedLabel, dayShortMonth, deltaPercent, elapsedDays, monthLong, monthLongYear, todayLocal, weekdayAndDay } from '../lib/format';
+import { categories, currency, settings } from '../lib/store';
 import { back, route, setQuery } from '../router';
+import { analyticsUrl } from '../components/AppTopline';
 import CategoryBars from '../components/CategoryBars';
-import MonthColumns from '../components/MonthColumns';
+import MonthColumns, { wholeAmount } from '../components/MonthColumns';
+import ReportSummary from '../components/ReportSummary';
 
 const BIGGEST = 5;
 
@@ -32,6 +34,7 @@ export default function Report() {
   const month = reportMonth(route.value.query.get('m'), today);
   const range = monthRange(`${month}-01`);
   const prev = previousRange('month', range);
+  const compared = comparableRange(range, prev, today);
   const isCurrent = month === today.slice(0, 7);
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -41,7 +44,7 @@ export default function Report() {
     const opts = { signal: ctrl.signal };
     setLoad((l) => (l.status === 'ready' ? l : { status: 'loading' }));
     Promise.all([
-      api.summary({ from: range.from, to: range.to, prev_from: prev.from, prev_to: prev.to }, opts),
+      api.summary({ from: range.from, to: range.to, prev_from: compared.from, prev_to: compared.to }, opts),
       api.listEntries(range.from, range.to, opts),
       api.summaryMonths(addMonths(range.from, -(TREND_MONTHS - 1)).slice(0, 7), month, opts),
     ])
@@ -50,11 +53,11 @@ export default function Report() {
         if (!isAbortError(err)) setLoad({ status: 'error' });
       });
     return () => ctrl.abort();
-  }, [month, attempt]);
+  }, [month, compared.to, attempt]);
 
   const data = load.status === 'ready' && load.month === month ? load.data : null;
   const title = monthLongYear(range.from, language);
-  const prevName = monthLong(prev.from, language);
+  const comparedWith = comparedLabel('month', prev, compared, language);
 
   // The PDF's file name comes from the document title.
   const savePdf = () => {
@@ -67,7 +70,7 @@ export default function Report() {
   return (
     <main class="screen report">
       <header class="topline">
-        <button type="button" onClick={() => back('/overview')}>
+        <button type="button" onClick={() => back(analyticsUrl())}>
           {t('common.back')}
         </button>
         <span>{t('report.title')}</span>
@@ -94,7 +97,7 @@ export default function Report() {
           </button>
         </p>
       ) : null}
-      {data ? <ReportBody data={data} month={month} today={today} prevName={prevName} /> : load.status === 'loading' ? <div class="rp-pending" aria-busy="true" /> : null}
+      {data ? <ReportBody data={data} month={month} today={today} title={title} comparedWith={comparedWith} /> : load.status === 'loading' ? <div class="rp-pending" aria-busy="true" /> : null}
 
       <div class="ov-links rp-actions">
         <button type="button" class="btn primary" onClick={savePdf} disabled={!data}>
@@ -108,7 +111,7 @@ export default function Report() {
   );
 }
 
-function ReportBody({ data, month, today, prevName }: { data: ReportData; month: string; today: string; prevName: string }) {
+function ReportBody({ data, month, today, title, comparedWith }: { data: ReportData; month: string; today: string; title: string; comparedWith: string }) {
   const language = lang.value;
   const { summary, entries, history } = data;
   const range = { from: summary.from, to: summary.to };
@@ -122,6 +125,8 @@ function ReportBody({ data, month, today, prevName }: { data: ReportData; month:
   const days = elapsedDays(range, today);
   const busiest = busiestDay(summary.by_day);
   const diff = total - prevTotal;
+  const split = summary.by_category.some((c) => categories.value.some((k) => k.id === c.category_id && k.fixed === true)) ? splitFixed(summary.by_category, categories.value) : null;
+  const average = averageCents(history.months, month);
 
   return (
     <>
@@ -142,9 +147,10 @@ function ReportBody({ data, month, today, prevName }: { data: ReportData; month:
         ) : null}
         <p class="rp-vs">
           {delta !== null
-            ? t('report.vsPrev', { delta: signedPercent(delta), month: prevName, diff: `${diff > 0 ? '+' : diff < 0 ? '−' : ''}${formatAmount(Math.abs(diff))}` })
-            : t('report.noPrev', { month: prevName })}
+            ? t('report.vsPrev', { delta: arrowPercent(delta), month: comparedWith, diff: `${diff > 0 ? '+' : diff < 0 ? '−' : ''}${formatAmount(Math.abs(diff))}` })
+            : t('report.noPrev', { month: comparedWith })}
         </p>
+        {split ? <p class="rp-vs">{t('overview.split', { fixed: formatAmount(split.fixed), daily: formatAmount(split.daily) })}</p> : null}
       </section>
 
       <dl class="rp-stats">
@@ -167,8 +173,10 @@ function ReportBody({ data, month, today, prevName }: { data: ReportData; month:
         ) : null}
       </dl>
 
+      <ReportSummary key={summary.from} title={title} comparedWith={comparedWith} summary={summary} entries={entries} />
+
       <h2 class="lbl sec">{t('report.byCategory')}</h2>
-      <CategoryBars rows={summary.by_category} totalCents={total} />
+      <CategoryBars rows={summary.by_category} totalCents={total} comparedWith={comparedWith} />
 
       <h2 class="lbl sec">{t('report.biggest')}</h2>
       <ul class="entries rp-biggest">
@@ -184,8 +192,11 @@ function ReportBody({ data, month, today, prevName }: { data: ReportData; month:
         ))}
       </ul>
 
-      <h2 class="lbl sec">{t('report.history')}</h2>
-      <MonthColumns points={monthPoints(history.months)} highlight={month} />
+      <h2 class="lbl sec">
+        {t('report.history')}
+        {average !== null ? <span class="sec-aside"> · {t('category.avg', { amount: wholeAmount(average) })}</span> : null}
+      </h2>
+      <MonthColumns points={monthPoints(history.months)} highlight={month} averageCents={average} />
     </>
   );
 }

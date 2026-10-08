@@ -39,6 +39,9 @@ export const CURRENCIES: ReadonlyArray<{ code: string; en: string; fr: string }>
   { code: 'KRW', en: 'South Korean won', fr: 'Won sud-coréen' },
 ];
 
+/** Default categories that start out as fixed costs (migration 0003 does the same for existing accounts). */
+export const FIXED_CATEGORIES: readonly string[] = ['Bills', 'Factures'];
+
 export const BUDGET_THRESHOLDS = [50, 80, 100] as const;
 export const CRON_SLOT_MINUTES = 15;
 export const WEEKLY_HOUR = '09:00';

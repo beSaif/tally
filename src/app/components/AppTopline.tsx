@@ -5,6 +5,17 @@ import Wordmark from './Wordmark';
 
 export type View = 'ledger' | 'analytics';
 
+let lastAnalytics = '/overview';
+
+/** Analytics records where it is, so the switch (and the report's back) return to that period. */
+export function rememberAnalytics(url: string): void {
+  lastAnalytics = url;
+}
+
+export function analyticsUrl(): string {
+  return lastAnalytics;
+}
+
 /**
  * Top line of Home and Analytics: wordmark (→ settings), the Ledger | Analytics switch and the gear.
  * Analytics is pushed on top of the ledger, so going back to the ledger is a history step and the
@@ -19,7 +30,7 @@ export default function AppTopline({ view }: { view: View }) {
       <span class="right">
         <span class="views" role="tablist" aria-label={t('nav.views')}>
           <ViewTab on={view === 'ledger'} label={t('nav.ledger')} go={() => back('/')} />
-          <ViewTab on={view === 'analytics'} label={t('nav.analytics')} go={() => navigate('/overview')} />
+          <ViewTab on={view === 'analytics'} label={t('nav.analytics')} go={() => navigate(lastAnalytics)} />
         </span>
         <button type="button" class="ibtn ghost xs" aria-label={t('common.settings')} onClick={() => navigate('/settings')}>
           <IconGear />

@@ -9,7 +9,7 @@ import { daysLeftInMonth, monthRange, zonedParts } from '@shared/dates';
 import type { Env } from '../env';
 import { loadSettingsRow, nowMs } from '../lib/db';
 import { occurredBounds } from '../lib/range';
-import { budgetText } from './strings';
+import { budgetText, categoryBudgetText } from './strings';
 import { sendWebPush, vapidFromEnv, type SendOptions, type SendResult, type Vapid, type VapidCache } from './webpush';
 
 export interface SubscriptionRow {
@@ -174,15 +174,30 @@ export async function maybeSendBudgetAlerts(env: Env, userId: string, occurredAt
   }
 }
 
+/** One budget the month's spending is measured against: the overall one or a category's. */
+interface Budget {
+  /** notification_log key prefix within the month, and the notification tag. */
+  key: string;
+  tag: string;
+  budgetCents: number;
+  spentCents: number;
+  /** The category's name; undefined for the overall budget. */
+  category?: string;
+}
+
+const CATEGORY_TOTALS = `SELECT c.id, c.name, c.budget_cents, COALESCE(SUM(e.amount_cents), 0) AS total
+  FROM categories c LEFT JOIN entries e ON e.category_id = c.id AND e.user_id = c.user_id AND e.occurred_at >= ? AND e.occurred_at <= ?
+  WHERE c.user_id = ? AND c.budget_cents > 0
+  GROUP BY c.id`;
+
 /**
- * The budget alert logic with an injectable clock (tests). Logs every threshold the month's
- * total has crossed and notifies about the highest one not logged before.
- * Returns the number of devices notified.
+ * The budget alert logic with an injectable clock (tests). For the overall budget and each
+ * category budget, logs every threshold this month's spending has crossed and notifies about the
+ * highest one not logged before. Returns the number of devices notified.
  */
 export async function runBudgetAlerts(env: Env, userId: string, occurredAt: string, now: Date): Promise<number> {
   const settings = await loadSettingsRow(env, userId);
-  const budget = settings?.budget_cents ?? 0;
-  if (!settings || settings.notif_budget !== 1 || budget <= 0) return 0;
+  if (!settings || settings.notif_budget !== 1) return 0;
   const subs = await loadSubscriptions(env, userId);
   const latest = subs[0];
   if (!latest) return 0;
@@ -192,12 +207,22 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   const month = today.slice(0, 7);
   if (occurredAt.slice(0, 7) !== month) return 0;
 
-  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?')
-    .bind(userId, ...occurredBounds(monthRange(today)))
-    .first<{ total: number }>();
-  const total = row?.total ?? 0;
-  const crossed = BUDGET_THRESHOLDS.filter((t) => total * 100 >= t * budget);
-  if (crossed.length === 0) return 0;
+  const bounds = occurredBounds(monthRange(today));
+  const [totalRes, categoryRes] = await env.DB.batch([
+    env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?').bind(userId, ...bounds),
+    env.DB.prepare(CATEGORY_TOTALS).bind(...bounds, userId),
+  ]);
+  const budgets: Budget[] = [];
+  const overall = settings.budget_cents ?? 0;
+  if (overall > 0) {
+    const total = ((totalRes?.results ?? []) as Array<{ total: number }>)[0]?.total ?? 0;
+    budgets.push({ key: '', tag: 'budget', budgetCents: overall, spentCents: total });
+  }
+  for (const c of (categoryRes?.results ?? []) as Array<{ id: string; name: string; budget_cents: number; total: number }>) {
+    budgets.push({ key: `cat:${c.id}:`, tag: `budget-${c.id}`, budgetCents: c.budget_cents, spentCents: c.total, category: c.name });
+  }
+  const crossedBy = budgets.map((b) => BUDGET_THRESHOLDS.filter((t) => b.spentCents * 100 >= t * b.budgetCents));
+  if (crossedBy.every((crossed) => crossed.length === 0)) return 0;
 
   // Check the keys before logging, or an unconfigured server would swallow the alert for good.
   const vapid = await vapidFromEnv(env);
@@ -207,30 +232,37 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
   }
 
   const sentAt = nowMs();
-  const keyOf = (threshold: number) => `${month}:${threshold}`;
+  const keyOf = (b: Budget, threshold: number) => `${month}:${b.key}${threshold}`;
+  const claims = budgets.flatMap((b, i) => (crossedBy[i] ?? []).map((t) => ({ budget: b, threshold: t })));
   const inserted = await env.DB.batch(
-    crossed.map((t) =>
-      env.DB.prepare('INSERT OR IGNORE INTO notification_log (user_id, kind, period_key, sent_at) VALUES (?, ?, ?, ?)').bind(userId, 'budget', keyOf(t), sentAt),
+    claims.map(({ budget, threshold }) =>
+      env.DB.prepare('INSERT OR IGNORE INTO notification_log (user_id, kind, period_key, sent_at) VALUES (?, ?, ?, ?)').bind(userId, 'budget', keyOf(budget, threshold), sentAt),
     ),
   );
-  const fresh = crossed.filter((_, i) => (inserted[i]?.meta.changes ?? 0) > 0);
-  if (fresh.length === 0) return 0;
-  const threshold = Math.max(...fresh);
+  const fresh = claims.filter((_, i) => (inserted[i]?.meta.changes ?? 0) > 0);
 
   const daysLeft = daysLeftInMonth(today);
-  const delivery = await sendToSubscriptions(
-    env,
-    subs,
-    (lang) => ({
-      kind: 'budget',
-      ...budgetText(lang, { threshold, spentCents: total, budgetCents: budget, currency: settings.currency, daysLeft }),
-      url: '/overview?p=month',
-      tag: 'budget',
-      lang,
-    }),
-    vapid,
-  );
-  // Undo this call's claims so the next entry write tries again.
-  if (worthRetrying(delivery)) await Promise.all(fresh.map((t) => releaseNotification(env, userId, 'budget', keyOf(t))));
-  return delivery.sent;
+  let sent = 0;
+  for (const budget of budgets) {
+    const mine = fresh.filter((f) => f.budget === budget).map((f) => f.threshold);
+    if (mine.length === 0) continue;
+    const threshold = Math.max(...mine);
+    const input = { threshold, spentCents: budget.spentCents, budgetCents: budget.budgetCents, currency: settings.currency, daysLeft };
+    const delivery = await sendToSubscriptions(
+      env,
+      subs,
+      (lang) => ({
+        kind: 'budget',
+        ...(budget.category === undefined ? budgetText(lang, input) : categoryBudgetText(lang, { ...input, category: budget.category })),
+        url: '/overview?p=month',
+        tag: budget.tag,
+        lang,
+      }),
+      vapid,
+    );
+    sent += delivery.sent;
+    // Undo this call's claims so the next entry write tries again.
+    if (worthRetrying(delivery)) await Promise.all(mine.map((t) => releaseNotification(env, userId, 'budget', keyOf(budget, t))));
+  }
+  return sent;
 }

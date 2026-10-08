@@ -8,6 +8,7 @@ import type {
   Bootstrap,
   CategoriesInput,
   Category,
+  CategoryPatch,
   DeleteAccountInput,
   Entry,
   EntryPatch,
@@ -132,6 +133,7 @@ export const api = {
   putSettings: (body: SettingsInput) => request<{ settings: Settings }>('PUT', '/settings', body),
   getCategories: () => request<{ categories: Category[] }>('GET', '/categories'),
   putCategories: (body: CategoriesInput) => request<{ categories: Category[] }>('PUT', '/categories', body),
+  patchCategory: (id: string, patch: CategoryPatch) => request<{ category: Category }>('PATCH', `/categories/${encodeURIComponent(id)}`, patch),
 
   // ---- entries ----
   listEntries: (from: string, to: string, opts?: RequestOptions) => request<{ entries: Entry[] }>('GET', `/entries${q({ from, to })}`, undefined, opts),

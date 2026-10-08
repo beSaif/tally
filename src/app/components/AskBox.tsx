@@ -1,7 +1,7 @@
 /**
  * "Ask your data" (design C.3, spec §3.6): a question about the visible period goes to Gemini with
  * that period's entries; the latest answer renders above the box with amounts in mono and the
- * first category mentioned in the accent colour.
+ * first category mentioned in the accent colour. ERROR_KEYS also serves the report's summary.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Summary } from '@shared/api';
@@ -21,7 +21,7 @@ type AskState =
   | { kind: 'answer'; question: string; text: string }
   | { kind: 'error'; question: string; code: GeminiErrorCode | 'offline' };
 
-const ERROR_KEYS = {
+export const ERROR_KEYS = {
   invalid_key: 'gemini.invalid_key',
   model_not_found: 'gemini.model_not_found',
   quota: 'gemini.quota',

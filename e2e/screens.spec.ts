@@ -98,8 +98,11 @@ test('overview (A.3 + C.3): month, week, year, previous periods, deltas, ask', a
   await expect(page.locator('.stats')).toHaveText('32 entries · avg 256.92 / day');
   const bars = page.locator('.bars li');
   await expect(bars).toHaveCount(6);
-  await expect(bars.nth(0)).toHaveText(/Groceries\s*\+9%\s*32%\s*412\.30/);
-  await expect(bars.nth(1)).toHaveText(/Dining\s*\+18%\s*22%\s*286\.10/);
+  // A running month compares with the same days of the month before: 1–5 September had only bills.
+  await expect(page.locator('.bars-cap')).toHaveText('Change vs 1–5 Sept');
+  await expect(bars.nth(0)).toHaveText(/^Groceries\s*32%\s*412\.30/);
+  await expect(bars.nth(1)).toHaveText(/^Dining\s*22%\s*286\.10/);
+  await expect(bars.nth(2)).toHaveText(/^Bills\s*0%\s*19%\s*240\.00/);
   await expect(bars.nth(1).locator('.fill')).toHaveAttribute('style', /width: 69%/);
   await expect(page.getByRole('link', { name: 'Export CSV →' })).toHaveAttribute('href', '/api/export.csv?from=2026-10-01&to=2026-10-31');
   await shot(page, 'screen-overview-month');

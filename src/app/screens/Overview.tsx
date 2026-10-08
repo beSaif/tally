@@ -1,17 +1,19 @@
 /**
  * Analytics (design A.3 + C.3, spec §3.6): week / month / year totals, category bars with a
- * drill-down per category, the month's report, export, ask.
+ * drill-down per category, fixed vs day-to-day, the month's report, export, ask. The period lives in
+ * the URL (`?p=month&d=2026-09-14`), so going back or switching views returns to it.
  */
 import { useEffect, useState } from 'preact/hooks';
 import type { Entry, Summary, SummaryCategory } from '@shared/api';
-import { periodRange, previousRange, shiftAnchor, type PeriodKind } from '@shared/dates';
+import { comparableRange, periodRange, previousRange, shiftAnchor, type PeriodKind } from '@shared/dates';
 import { formatAmount } from '@shared/money';
 import { lang, t } from '../i18n';
+import { anchorDay, splitFixed } from '../lib/analytics';
 import { api, isAbortError } from '../lib/api';
-import { elapsedDays, elapsedMonths, monthLong, periodLabel, todayLocal } from '../lib/format';
-import { currency } from '../lib/store';
+import { comparedLabel, elapsedDays, elapsedMonths, monthLong, periodLabel, todayLocal } from '../lib/format';
+import { categories, currency } from '../lib/store';
 import { linkTo, route, setQuery } from '../router';
-import AppTopline from '../components/AppTopline';
+import AppTopline, { rememberAnalytics } from '../components/AppTopline';
 import AskBox from '../components/AskBox';
 import CategoryBars from '../components/CategoryBars';
 import CategorySheet from '../components/CategorySheet';
@@ -25,36 +27,46 @@ function kindOf(p: string | null): PeriodKind {
 
 type Load = { status: 'loading' } | { status: 'ready'; summary: Summary } | { status: 'error' };
 
+/** The drill-down that is open: a category id, or null for "Other". */
+type Open = { id: string | null };
+
 export default function Overview() {
-  const kind = kindOf(route.value.query.get('p'));
+  const query = route.value.query;
+  const kind = kindOf(query.get('p'));
   const today = todayLocal();
-  const [anchor, setAnchor] = useState(today);
+  const anchor = anchorDay(query.get('d'), today);
+  const setAnchor = (day: string) => setQuery({ d: day >= today ? null : day });
   const range = periodRange(kind, anchor);
   const prev = previousRange(kind, range);
+  const compared = comparableRange(range, prev, today);
   const nextRange = periodRange(kind, shiftAnchor(kind, anchor, 1));
   const canGoNext = nextRange.from <= today;
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
-  const [category, setCategory] = useState<SummaryCategory | null>(null);
-  const [entry, setEntry] = useState<Entry | null>(null);
+  const [open, setOpen] = useState<Open | null>(null);
+  const [editing, setEditing] = useState<{ entry: Entry; from: Open } | null>(null);
   const language = lang.value;
+
+  // The Ledger | Analytics switch comes back to this period.
+  useEffect(() => rememberAnalytics(location.pathname + location.search), [route.value]);
 
   useEffect(() => {
     const ctrl = new AbortController();
     setLoad((l) => (l.status === 'ready' ? l : { status: 'loading' }));
     api
-      .summary({ from: range.from, to: range.to, prev_from: prev.from, prev_to: prev.to }, { signal: ctrl.signal })
+      .summary({ from: range.from, to: range.to, prev_from: compared.from, prev_to: compared.to }, { signal: ctrl.signal })
       .then((summary) => setLoad({ status: 'ready', summary }))
       .catch((err: unknown) => {
         if (!isAbortError(err)) setLoad({ status: 'error' });
       });
     return () => ctrl.abort();
-  }, [kind, range.from, range.to, attempt]);
+  }, [kind, range.from, range.to, compared.to, attempt]);
 
   const summary = load.status === 'ready' && load.summary.from === range.from && load.summary.to === range.to ? load.summary : null;
   const total = summary?.total_cents ?? 0;
   const count = summary?.count ?? 0;
   const label = periodLabel(kind, range, language);
+  const comparedWith = comparedLabel(kind, prev, compared, language);
   let stats: string;
   if (kind === 'year') {
     const m = elapsedMonths(range, today);
@@ -65,6 +77,20 @@ export default function Overview() {
   }
 
   const reportUrl = `/report?m=${range.from.slice(0, 7)}`;
+  const rows = summary?.by_category ?? [];
+  const uncategorised = rows.find((r) => r.category_id === null)?.count ?? 0;
+  const anyFixed = rows.some((r) => categories.value.some((c) => c.id === r.category_id && c.fixed === true));
+  const split = anyFixed ? splitFixed(rows, categories.value) : null;
+  const budgets = kind === 'month' ? new Map(categories.value.filter((c) => (c.budget_cents ?? 0) > 0).map((c) => [c.id, c.budget_cents ?? 0])) : undefined;
+  // The open drill-down's row; a category emptied by an edit stays open at zero.
+  const openRow: SummaryCategory | null = open
+    ? (rows.find((r) => r.category_id === open.id) ?? {
+        category_id: open.id,
+        name: categories.value.find((c) => c.id === open.id)?.name ?? null,
+        total_cents: 0,
+        count: 0,
+      })
+    : null;
 
   return (
     <main class="screen overview">
@@ -107,6 +133,11 @@ export default function Overview() {
         <div class="meta-row stats">
           <span>{stats}</span>
         </div>
+        {split ? (
+          <div class="meta-row split">
+            <span>{t('overview.split', { fixed: formatAmount(split.fixed), daily: formatAmount(split.daily) })}</span>
+          </div>
+        ) : null}
       </div>
 
       {load.status === 'error' ? (
@@ -117,7 +148,15 @@ export default function Overview() {
           </button>
         </p>
       ) : null}
-      {summary && summary.by_category.length > 0 ? <CategoryBars rows={summary.by_category} totalCents={total} onOpen={setCategory} /> : null}
+      {summary && summary.by_category.length > 0 && (summary.previous?.total_cents ?? 0) > 0 ? <p class="lbl bars-cap">{t('overview.compared', { period: comparedWith })}</p> : null}
+      {summary && summary.by_category.length > 0 ? (
+        <CategoryBars rows={summary.by_category} totalCents={total} comparedWith={comparedWith} budgets={budgets} onOpen={(c) => setOpen({ id: c.category_id })} />
+      ) : null}
+      {uncategorised > 0 ? (
+        <button type="button" class="link nudge" onClick={() => setOpen({ id: null })}>
+          {t('overview.uncategorised', { count: uncategorised })}
+        </button>
+      ) : null}
       {summary && summary.by_category.length === 0 ? <p class="ov-note">{t('overview.empty')}</p> : null}
 
       <div class="ov-links">
@@ -133,28 +172,31 @@ export default function Overview() {
 
       <AskBox key={`${kind}:${range.from}`} periodLabel={label} range={range} summary={summary} />
 
-      {category ? (
+      {open && openRow ? (
         <CategorySheet
-          key={`${category.category_id ?? 'other'}:${range.from}`}
-          category={category}
+          key={`${open.id ?? 'other'}:${range.from}:${attempt}`}
+          category={openRow}
+          kind={kind}
           range={range}
           periodLabel={label}
           periodTotalCents={total}
           onOpenEntry={(e) => {
-            setCategory(null);
-            setEntry(e);
+            setEditing({ entry: e, from: open });
+            setOpen(null);
           }}
-          onClose={() => setCategory(null)}
+          onClose={() => setOpen(null)}
         />
       ) : null}
-      {entry ? (
+      {editing ? (
         <EntrySheet
-          key={entry.id}
-          entry={entry}
+          key={editing.entry.id}
+          entry={editing.entry}
           onClose={() => {
-            setEntry(null);
-            // The entry may have moved category, amount or month: recount the period.
+            // The entry may have moved category, amount or month: recount the period, then go
+            // back to the category it was opened from.
             setAttempt((a) => a + 1);
+            setOpen(editing.from);
+            setEditing(null);
           }}
         />
       ) : null}

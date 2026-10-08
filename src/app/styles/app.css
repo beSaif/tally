@@ -625,13 +625,19 @@ button.link {
   display: inline-flex;
   border: 1px solid var(--ink);
   border-radius: 8px;
-  overflow: hidden;
   margin: -5px 0;
 }
 .topline .views button {
+  position: relative;
   margin: 0;
   padding: 5px 9px;
   font-size: 10.5px;
+}
+.topline .views button:first-child {
+  border-radius: 7px 0 0 7px;
+}
+.topline .views button:last-child {
+  border-radius: 0 7px 7px 0;
 }
 .topline .views button + button {
   border-left: 1px solid var(--ink);
@@ -640,8 +646,48 @@ button.link {
   background: var(--ink);
   color: #fff;
 }
+/* The pill and the gear stay small; their touch areas are 44px tall. */
+.topline .views button::after,
+.topline .ibtn.xs::after {
+  content: '';
+  position: absolute;
+  inset: -9px 0;
+}
+.topline .ibtn.xs {
+  position: relative;
+}
+.topline .ibtn.xs::after {
+  inset: -8px -2px;
+}
+
+/* Period tabs: text with an underline, so they read as a filter under the view switch. */
+.overview .tabs {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  overflow: visible;
+  margin: 12px 0 16px;
+  gap: 22px;
+  justify-content: flex-start;
+}
+.overview .tabs button {
+  flex: 0 0 auto;
+  border-right: 0;
+  padding: 10px 0 9px;
+  margin-bottom: -1px;
+  color: var(--mute);
+  border-bottom: 2px solid transparent;
+}
+.overview .tabs .on {
+  background: none;
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
 
 /* ---------- category drill-down ---------- */
+.bars-cap {
+  margin-top: 4px;
+}
 .bars.open li {
   padding: 0;
 }
@@ -678,6 +724,72 @@ button.link {
   margin-top: 22px;
 }
 
+.bars .amt.over,
+.ov-num.over {
+  color: var(--acc);
+}
+.bars .track {
+  position: relative;
+}
+/* A category's monthly budget, on its bar's scale. */
+.bars .mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  background: var(--ink);
+}
+.ov-total .split {
+  margin-top: 4px;
+}
+.link.nudge {
+  align-self: flex-start;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--acc);
+  text-decoration: none;
+}
+.sec-aside {
+  color: var(--ink2);
+}
+.cat-budget {
+  margin-top: 14px;
+}
+.cat-budget .track {
+  margin-top: 8px;
+}
+.cat-settings {
+  grid-template-columns: 1fr auto;
+  margin-top: 22px;
+}
+.cat-settings > :nth-child(even) {
+  justify-content: flex-end;
+  padding-left: 12px;
+}
+.cat-settings .note {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  max-width: 30ch;
+}
+.cat-settings .budget-form input {
+  width: 72px;
+  text-align: right;
+}
+.cat-settings .row .mono {
+  font-size: 14px;
+}
+.cat-hint {
+  margin-top: 18px;
+}
+
 /* ---------- month columns ---------- */
 .cols {
   display: grid;
@@ -709,14 +821,24 @@ button.link {
 }
 .cols .col {
   flex: 1;
+  position: relative;
   display: flex;
   align-items: flex-end;
   padding: 4px 0 0;
 }
+/* One dashed segment per column, overlapping the gaps, reads as one line across. */
+.cols .avg {
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  border-top: 1px dashed var(--ink2);
+  opacity: 0.7;
+}
 .cols .bar {
   display: block;
   width: 100%;
-  background: var(--ink);
+  /* Light enough for the average line to read across them; the values are printed above. */
+  background: #cfcfcb;
   border-radius: 2px 2px 0 0;
 }
 .cols .on .bar {
@@ -792,6 +914,24 @@ button.link {
 .rp-biggest li {
   grid-template-columns: 52px 1fr auto;
 }
+.rp-summary {
+  margin-top: 4px;
+}
+.rp-summary-text {
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.38;
+}
+.rp-summary-text .acc {
+  color: var(--acc);
+}
+.rp-summarize {
+  margin-top: 20px;
+}
+.rp-summary .thinking-dots {
+  margin: 22px 0 6px;
+}
 .rp-pending {
   min-height: 320px;
 }
@@ -818,6 +958,7 @@ button.link {
   .report .topline,
   .report .period button,
   .rp-actions,
+  .rp-summarize,
   .toast-region {
     display: none !important;
   }

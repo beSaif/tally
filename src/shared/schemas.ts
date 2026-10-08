@@ -34,6 +34,10 @@ export const categoriesInputSchema = z.object({
   categories: z.array(z.object({ id: z.string().uuid().optional(), name: z.string().trim().min(1).max(40) })).max(60),
 });
 
+export const categoryPatchSchema = z
+  .object({ budget_cents: z.number().int().min(100).max(1_000_000_000).nullable().optional(), fixed: z.boolean().optional() })
+  .refine((p) => p.budget_cents !== undefined || p.fixed !== undefined, 'nothing to change');
+
 export const newEntrySchema = z.object({
   amount_cents: z.number().int().min(0).max(1_000_000_000),
   currency: currencySchema.optional(),

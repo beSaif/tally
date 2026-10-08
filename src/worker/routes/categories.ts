@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { categoriesInputSchema } from '@shared/schemas';
+import { categoriesInputSchema, categoryPatchSchema } from '@shared/schemas';
 import type { AppEnv } from '../env';
-import { readJson, validation } from '../lib/http';
-import { loadCategories, nowMs, uuid } from '../lib/db';
+import { notFound, readJson, validation } from '../lib/http';
+import { categoryFromRow, loadCategories, nowMs, uuid, type CategoryRow } from '../lib/db';
 import { requireUser } from '../lib/auth';
 import { categoryKey } from '../lib/categories';
 
@@ -62,4 +62,24 @@ categoriesRoutes.put('/', requireUser, async (c) => {
   ];
   await db.batch(statements);
   return c.json({ categories: await loadCategories(c.env, userId) });
+});
+
+/** Sets a category's monthly budget (null clears it) and whether it is a fixed cost. */
+categoriesRoutes.patch('/:id', requireUser, async (c) => {
+  const patch = await readJson(c, categoryPatchSchema);
+  const sets: string[] = [];
+  const values: Array<number | null> = [];
+  if (patch.budget_cents !== undefined) {
+    sets.push('budget_cents = ?');
+    values.push(patch.budget_cents);
+  }
+  if (patch.fixed !== undefined) {
+    sets.push('fixed = ?');
+    values.push(patch.fixed ? 1 : 0);
+  }
+  const row = await c.env.DB.prepare(`UPDATE categories SET ${sets.join(', ')} WHERE id = ? AND user_id = ? RETURNING *`)
+    .bind(...values, c.req.param('id'), c.var.user.id)
+    .first<CategoryRow>();
+  if (!row) throw notFound('Category not found');
+  return c.json({ category: categoryFromRow(row) });
 });

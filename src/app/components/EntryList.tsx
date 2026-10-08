@@ -9,10 +9,12 @@ interface Props {
   currency: string;
   fresh: ReadonlySet<string>;
   onOpen: (entry: Entry) => void;
+  /** Off where every entry has the same category (Analytics drill-down). */
+  showCategory?: boolean;
 }
 
 /** Day groups (TODAY / YESTERDAY / SUN 04) with their totals, newest first (design A.1). */
-export default function EntryList({ entries, today, currency, fresh, onOpen }: Props) {
+export default function EntryList({ entries, today, currency, fresh, onOpen, showCategory = true }: Props) {
   const language = lang.value;
   return (
     <>
@@ -24,7 +26,7 @@ export default function EntryList({ entries, today, currency, fresh, onOpen }: P
           </h3>
           <ul class="entries">
             {g.entries.map((e) => (
-              <EntryRow key={e.id} entry={e} currency={currency} fresh={fresh.has(e.id)} onOpen={onOpen} />
+              <EntryRow key={e.id} entry={e} currency={currency} fresh={fresh.has(e.id)} onOpen={onOpen} showCategory={showCategory} />
             ))}
           </ul>
         </section>
@@ -33,7 +35,7 @@ export default function EntryList({ entries, today, currency, fresh, onOpen }: P
   );
 }
 
-function EntryRow({ entry, currency, fresh, onOpen }: { entry: Entry; currency: string; fresh: boolean; onOpen: (e: Entry) => void }) {
+function EntryRow({ entry, currency, fresh, onOpen, showCategory }: { entry: Entry; currency: string; fresh: boolean; onOpen: (e: Entry) => void; showCategory: boolean }) {
   const category = entry.category_name ?? t('common.other');
   return (
     <li
@@ -52,7 +54,7 @@ function EntryRow({ entry, currency, fresh, onOpen }: { entry: Entry; currency: 
       <span class="t">{timeOf(entry.occurred_at)}</span>
       <span>
         <span class="n">{entry.description}</span>
-        <span class="c">{category}</span>
+        {showCategory ? <span class="c">{category}</span> : null}
       </span>
       <span class="a">
         {formatAmount(entry.amount_cents)}

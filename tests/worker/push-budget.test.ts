@@ -25,6 +25,47 @@ async function budgetUser(settings: Parameters<typeof seedUser>[0] = { budget_ce
   return { userId, sub };
 }
 
+describe('category budget alerts', () => {
+  async function categoryUser(settings: Parameters<typeof seedUser>[0] = {}) {
+    const { userId, sub } = await budgetUser(settings);
+    const id = crypto.randomUUID();
+    await env.DB.prepare('INSERT INTO categories (id, user_id, name, position, budget_cents, created_at) VALUES (?, ?, ?, 0, ?, 0)').bind(id, userId, 'Dining', 25_000).run();
+    return { userId, sub, id };
+  }
+
+  it('alerts per category threshold, without an overall budget, under its own tag', async () => {
+    const { userId, sub, id } = await categoryUser({ budget_cents: null });
+    await addEntries(userId, [
+      { amount_cents: 20_500, occurred_at: '2026-10-03T12:00', category_id: id },
+      { amount_cents: 90_000, occurred_at: '2026-10-04T12:00' },
+      { amount_cents: 30_000, occurred_at: '2026-09-04T12:00', category_id: id },
+    ]);
+    const calls = mockPushService(201);
+    expect(await runBudgetAlerts(env, userId, '2026-10-03T12:00', NOW)).toBe(1);
+    expect(await payloadsFor(calls, sub)).toEqual([
+      { kind: 'budget', title: 'Dining: 80% of its budget', body: '205.00 of 250 CHF · 17 days left', url: '/overview?p=month', tag: `budget-${id}`, lang: 'en' },
+    ]);
+    expect(await logKeys(userId, 'budget')).toEqual([`2026-10:cat:${id}:50`, `2026-10:cat:${id}:80`]);
+    expect(await runBudgetAlerts(env, userId, '2026-10-03T12:00', NOW)).toBe(0);
+  });
+
+  it('sends the overall and a category alert from the same save', async () => {
+    const { userId, sub, id } = await categoryUser({ budget_cents: 50_000 });
+    await addEntries(userId, [{ amount_cents: 26_000, occurred_at: '2026-10-14T09:00', category_id: id }]);
+    const calls = mockPushService(201);
+    expect(await runBudgetAlerts(env, userId, '2026-10-14T09:00', NOW)).toBe(2);
+    expect((await payloadsFor(calls, sub)).map((p) => p.title).sort()).toEqual(['Dining: budget reached', 'Halfway through your budget']);
+  });
+
+  it('stays quiet when budget alerts are off', async () => {
+    const { userId, id } = await categoryUser({ notif_budget: 0 });
+    await addEntries(userId, [{ amount_cents: 30_000, occurred_at: '2026-10-14T09:00', category_id: id }]);
+    const calls = mockPushService(201);
+    expect(await runBudgetAlerts(env, userId, '2026-10-14T09:00', NOW)).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('budget alerts', () => {
   it('alerts once per threshold: 50% first, then only 80%', async () => {
     const { userId, sub } = await budgetUser();

@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { Bootstrap, ResolvedLanguage, SignInError, User } from '@shared/api';
-import { DEFAULT_CATEGORIES, DEFAULT_CURRENCY, DEFAULT_MODEL, OAUTH_COOKIE, OAUTH_COOKIE_SECONDS } from '@shared/constants';
+import { DEFAULT_CATEGORIES, DEFAULT_CURRENCY, DEFAULT_MODEL, FIXED_CATEGORIES, OAUTH_COOKIE, OAUTH_COOKIE_SECONDS } from '@shared/constants';
 import { deleteAccountSchema } from '@shared/schemas';
 import type { AppEnv, Env, SessionUser } from '../env';
 import { ApiError, readJson } from '../lib/http';
@@ -122,7 +122,14 @@ async function findOrCreateUser(env: Env, who: GoogleIdentity, lang: ResolvedLan
         'INSERT INTO settings (user_id, currency, language, budget_cents, model, setup_complete, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, 0, ?, ?)',
       ).bind(id, DEFAULT_CURRENCY, 'auto', DEFAULT_MODEL, now, now),
       ...DEFAULT_CATEGORIES[lang].map((name, i) =>
-        env.DB.prepare('INSERT INTO categories (id, user_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)').bind(uuid(), id, name, i, now),
+        env.DB.prepare('INSERT INTO categories (id, user_id, name, position, fixed, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(
+          uuid(),
+          id,
+          name,
+          i,
+          FIXED_CATEGORIES.includes(name) ? 1 : 0,
+          now,
+        ),
       ),
     ]);
   } catch (err) {

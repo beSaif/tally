@@ -45,6 +45,41 @@ async function errorOf(res: Response): Promise<ApiErrorBody['error']> {
 const countFor = async (userId: string) =>
   (await env.DB.prepare('SELECT COUNT(*) AS n FROM categories WHERE user_id = ?').bind(userId).first<{ n: number }>())?.n;
 
+describe('category budget and fixed flag', () => {
+  const patch = (s: Session, id: string, body: unknown) => api(`/api/categories/${id}`, { method: 'PATCH', body, cookie: s.cookie });
+
+  it('sets and clears a budget, flags a fixed cost, and keeps both through a rename', async () => {
+    const s = await signup();
+    const { Dining, Bills } = await byName(s);
+    let res = await patch(s, Dining!.id, { budget_cents: 25_000 });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { category: Category }).category).toEqual({ ...Dining, budget_cents: 25_000 });
+    res = await patch(s, Dining!.id, { fixed: true });
+    expect(((await res.json()) as { category: Category }).category).toMatchObject({ budget_cents: 25_000, fixed: true });
+
+    const renamed = await replace(s, (await list(s)).map((c) => ({ id: c.id, name: c.id === Dining!.id ? 'Eating out' : c.name })));
+    expect(renamed.find((c) => c.id === Dining!.id)).toMatchObject({ name: 'Eating out', budget_cents: 25_000, fixed: true });
+
+    res = await patch(s, Dining!.id, { budget_cents: null, fixed: false });
+    expect(((await res.json()) as { category: Category }).category).toMatchObject({ budget_cents: null, fixed: false });
+    expect((await byName(s)).Bills).toEqual(Bills);
+  });
+
+  it("rejects empty or bad changes and another user's category", async () => {
+    const a = await signup();
+    const b = await signup();
+    const { Dining } = await byName(a);
+    for (const body of [{}, { budget_cents: 50 }, { budget_cents: 1.5 }, { fixed: 'yes' }]) {
+      const res = await patch(a, Dining!.id, body);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+    const res = await patch(b, Dining!.id, { budget_cents: 10_000 });
+    expect(res.status).toBe(404);
+    expect((await byName(a)).Dining).toEqual(Dining);
+    expect((await api(`/api/categories/${Dining!.id}`, { method: 'PATCH', body: { fixed: true } })).status).toBe(401);
+  });
+});
+
 describe('categories', () => {
   it('requires a session', async () => {
     expect((await api('/api/categories')).status).toBe(401);
@@ -58,8 +93,11 @@ describe('categories', () => {
     const categories = await list(s);
     expect(categories.map((c) => c.name)).toEqual([...DEFAULT_CATEGORIES.en]);
     expect(categories.map((c) => c.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    // Bills starts out as a fixed cost; no category has a budget.
+    expect(categories.filter((c) => c.fixed).map((c) => c.name)).toEqual(['Bills']);
     for (const c of categories) {
-      expect(Object.keys(c).sort()).toEqual(['id', 'name', 'position']);
+      expect(Object.keys(c).sort()).toEqual(['budget_cents', 'fixed', 'id', 'name', 'position']);
+      expect(c.budget_cents).toBeNull();
       expect(c.id).toMatch(UUID);
     }
   });

@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  comparableRange,
   addDays, addMonths, daysLeftInMonth, dueDay, floorToSlot, isoWeek, isoWeekKey, monthRange, previousRange,
   shiftAnchor, weekRange, yearRange, zonedParts, isValidDay, isValidMinute, daysBetween,
 } from '@shared/dates';
 
 describe('ranges', () => {
+  it('compares a running period with the same stretch of the one before', () => {
+    const oct = { from: '2026-10-01', to: '2026-10-31' };
+    const sep = { from: '2026-09-01', to: '2026-09-30' };
+    expect(comparableRange(oct, sep, '2026-10-05')).toEqual({ from: '2026-09-01', to: '2026-09-05' });
+    expect(comparableRange(oct, sep, '2026-10-31')).toEqual(sep);
+    expect(comparableRange(oct, sep, '2026-11-02')).toEqual(sep);
+    expect(comparableRange({ from: '2026-03-01', to: '2026-03-31' }, { from: '2026-02-01', to: '2026-02-28' }, '2026-03-30')).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+    expect(comparableRange({ from: '2026-10-05', to: '2026-10-11' }, { from: '2026-09-28', to: '2026-10-04' }, '2026-10-07')).toEqual({ from: '2026-09-28', to: '2026-09-30' });
+  });
+
   it('week is Monday..Sunday', () => {
     expect(weekRange('2026-10-05')).toEqual({ from: '2026-10-05', to: '2026-10-11' }); // Monday
     expect(weekRange('2026-10-11')).toEqual({ from: '2026-10-05', to: '2026-10-11' }); // Sunday

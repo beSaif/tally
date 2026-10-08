@@ -170,11 +170,18 @@ export function deltaPercent(current: number, previous: number | undefined): num
   return Math.round(((current - previous) / previous) * 100);
 }
 
-/** "+18" / "−5" / "0" (true minus sign, as in print). */
-export function signedPercent(n: number): string {
-  if (n > 0) return `+${n}`;
-  if (n < 0) return `−${Math.abs(n)}`;
+/** "↑18" / "↓5" / "0": a change, told apart from a share at a glance. */
+export function arrowPercent(n: number): string {
+  if (n > 0) return `↑${n}`;
+  if (n < 0) return `↓${Math.abs(n)}`;
   return '0';
+}
+
+/** What a period is compared with: "September" for a whole period, "1–5 Sept" for a matching stretch of one. */
+export function comparedLabel(kind: PeriodKind, prev: DayRange, compared: DayRange, language: ResolvedLanguage): string {
+  if (compared.to === prev.to) return kind === 'month' ? monthLong(prev.from, language) : periodLabel(kind, prev, language);
+  const label = weekRangeLabel(compared, language);
+  return kind === 'year' ? `${label} ${compared.from.slice(0, 4)}` : label;
 }
 
 /** Plain decimal for an amount input ("21.00"), never grouped so it round-trips through parseAmount. */

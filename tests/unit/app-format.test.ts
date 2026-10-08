@@ -11,7 +11,8 @@ import {
   monthLong,
   monthShortYear,
   periodLabel,
-  signedPercent,
+  arrowPercent,
+  comparedLabel,
   sumCents,
   totalsByCategory,
   weekRangeLabel,
@@ -108,9 +109,16 @@ describe('overview maths', () => {
     expect(deltaPercent(28610, 24250)).toBe(18);
     expect(deltaPercent(100, 0)).toBeNull();
     expect(deltaPercent(100, undefined)).toBeNull();
-    expect(signedPercent(18)).toBe('+18');
-    expect(signedPercent(-5)).toBe('−5');
-    expect(signedPercent(0)).toBe('0');
+    expect(arrowPercent(18)).toBe('↑18');
+    expect(arrowPercent(-5)).toBe('↓5');
+    expect(arrowPercent(0)).toBe('0');
+  });
+
+  it('names what a period is compared with', () => {
+    const sep = { from: '2026-09-01', to: '2026-09-30' };
+    expect(comparedLabel('month', sep, sep, 'en')).toBe('September');
+    expect(comparedLabel('month', sep, { from: '2026-09-01', to: '2026-09-05' }, 'en')).toBe('1–5 Sept');
+    expect(comparedLabel('year', { from: '2025-01-01', to: '2025-12-31' }, { from: '2025-01-01', to: '2025-10-05' }, 'en')).toBe('1 Jan – 5 Oct 2025');
   });
 });
 

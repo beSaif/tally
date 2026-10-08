@@ -27,6 +27,8 @@ export interface CategoryRow {
   name: string;
   position: number;
   created_at: number;
+  budget_cents: number | null;
+  fixed: number;
 }
 
 export function settingsFromRow(r: SettingsRow): Settings {
@@ -49,7 +51,7 @@ export function settingsFromRow(r: SettingsRow): Settings {
 }
 
 export function categoryFromRow(r: CategoryRow): Category {
-  return { id: r.id, name: r.name, position: r.position };
+  return { id: r.id, name: r.name, position: r.position, budget_cents: r.budget_cents, fixed: r.fixed === 1 };
 }
 
 export async function loadSettingsRow(env: Env, userId: string): Promise<SettingsRow | null> {

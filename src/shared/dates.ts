@@ -119,6 +119,17 @@ export function previousRange(kind: PeriodKind, range: DayRange): DayRange {
   return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31` };
 }
 
+/**
+ * What a period is compared with: `prev` cut to as many days as `range` has run by `today`, so a
+ * running month is measured against the same days of the month before (5 Oct: 1–5 Sep). A period
+ * that is over, or not begun, compares with the whole of `prev`.
+ */
+export function comparableRange(range: DayRange, prev: DayRange, today: string): DayRange {
+  if (today >= range.to || today < range.from) return prev;
+  const to = addDays(prev.from, daysBetween(range.from, today) - 1);
+  return { from: prev.from, to: to < prev.to ? to : prev.to };
+}
+
 /** Shift an anchor day by one period in either direction. */
 export function shiftAnchor(kind: PeriodKind, day: string, n: number): string {
   if (kind === 'week') return addDays(day, 7 * n);

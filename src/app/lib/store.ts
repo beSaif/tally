@@ -4,7 +4,7 @@
  * second account on a shared device is not silently handed someone else's key.
  */
 import { computed, effect, signal } from '@preact/signals';
-import type { Bootstrap, CategoriesInput, Category, Language, Settings, SettingsInput, User } from '@shared/api';
+import type { Bootstrap, CategoriesInput, Category, CategoryPatch, Language, Settings, SettingsInput, User } from '@shared/api';
 import { DEFAULT_CURRENCY, DEFAULT_MODEL, GEMINI_KEY_STORAGE } from '@shared/constants';
 import { api, isApiError } from './api';
 import { lang, languagePref } from '../i18n';
@@ -152,6 +152,14 @@ export async function replaceCategories(list: CategoriesInput['categories']): Pr
   categories.value = byPosition(res.categories);
   writeBootCache();
   return categories.value;
+}
+
+/** Sets a category's budget or fixed-cost flag (Analytics drill-down). */
+export async function updateCategory(id: string, patch: CategoryPatch): Promise<Category> {
+  const { category } = await api.patchCategory(id, patch);
+  categories.value = byPosition(categories.value.map((c) => (c.id === id ? category : c)));
+  writeBootCache();
+  return category;
 }
 
 /** Category id for a name (case-insensitive), or null for "Other"/unknown. */

@@ -180,7 +180,8 @@ export const en = {
   'overview.stats_other': '{count} entries · avg {avg} / day',
   'overview.statsYear': 'Avg {avg} / month',
   'overview.delta': '{delta}%',
-  'overview.deltaLabel': '{delta}% on the period before',
+  'overview.deltaLabel': '{delta}% vs {period}',
+  'overview.compared': 'Change vs {period}',
   'overview.export': 'Export CSV →',
   'overview.empty': 'Nothing logged in this period.',
   'overview.loadFailed': 'Could not load this period.',
@@ -193,6 +194,10 @@ export const en = {
   'overview.shareLabel': '{share}% of the total',
   'overview.openCategory': '{name}: entries and trend',
   'overview.report': '{month} report →',
+  'overview.split': 'Fixed {fixed} · Day-to-day {daily}',
+  'overview.uncategorised_one': '{count} entry has no category · Sort it →',
+  'overview.uncategorised_other': '{count} entries have no category · Sort them →',
+  'overview.budgetMark': 'Budget {budget}',
 
   // ---- category (analytics drill-down) ----
   'category.ofPeriod': '{share}% of {period}',
@@ -200,6 +205,16 @@ export const en = {
   'category.entries_other': '{count} entries',
   'category.trend': 'Last 6 months',
   'category.loadFailed': 'Could not load these entries.',
+  'category.avg': 'avg {amount}',
+  'category.budget': 'Monthly budget',
+  'category.noBudget': 'None',
+  'category.setBudget': 'Set',
+  'category.budgetPlaceholder': 'e.g. 250',
+  'category.left': '{amount} left',
+  'category.over': '{amount} over',
+  'category.fixed': 'Fixed cost',
+  'category.fixedHint': 'Rent, bills, subscriptions: counted apart from day-to-day spending.',
+  'category.otherHint': 'Tap an entry to give it a category.',
 
   // ---- monthly report ----
   'report.title': 'Report',
@@ -219,6 +234,9 @@ export const en = {
   'report.pdf': 'Save as PDF',
   'report.empty': 'Nothing logged in {month}.',
   'report.loadFailed': 'Could not load this report.',
+  'report.summarize': 'Summarize with Gemini',
+  'report.summaryThinking': 'Gemini is writing',
+  'report.summaryLabel': 'Summary',
 
   // ---- settings ----
   'settings.title': 'Settings',
