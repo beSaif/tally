@@ -187,7 +187,7 @@ export async function shot(page: Page, name: string, opts: { fullPage?: boolean;
 }
 
 /** Presses the mic like a finger: down, optionally drag up, then up after `holdMs` (unless `release: false`). */
-export async function pressMic(page: Page, opts: { holdMs: number; dragUp?: number; release?: boolean }): Promise<void> {
+export async function pressMic(page: Page, opts: { holdMs: number; release?: boolean }): Promise<void> {
   const mic = page.getByRole('button', { name: /Record a voice note|Enregistrer un message vocal/ });
   const box = await mic.boundingBox();
   if (!box) throw new Error('mic not visible');
@@ -195,7 +195,6 @@ export async function pressMic(page: Page, opts: { holdMs: number; dragUp?: numb
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  if (opts.dragUp) await page.mouse.move(x, y - opts.dragUp, { steps: 4 });
   await page.waitForTimeout(opts.holdMs);
   if (opts.release ?? true) await page.mouse.up();
 }

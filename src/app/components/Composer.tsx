@@ -1,8 +1,7 @@
 /**
  * The bottom input bar (spec §3.4): text (Enter sends), camera, and a mic that records on
- * pointerdown. Released within 300ms → tap mode (tap again to stop); held → release sends;
- * dragging up more than 80px before release cancels. The hold/tap decision lives in lib/capture
- * (releaseRecording), which also covers a press the microphone permission prompt takes away.
+ * pointerdown. Released within 300ms → tap mode (tap again to stop); held → release sends.
+ * The hold/tap decision lives in lib/capture (releaseRecording), which also covers a press the microphone permission prompt takes away.
  */
 import { useEffect, useRef } from 'preact/hooks';
 import { t } from '../i18n';
@@ -14,19 +13,16 @@ import {
   keepListening,
   photoPickRequest,
   releaseRecording,
-  setCancelArmed,
   startRecording,
   submitPhoto,
   submitText,
 } from '../lib/capture';
 import { IconCam, IconMic, IconSend } from './Icons';
 
-const CANCEL_PX = 80;
-
 export default function Composer() {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const press = useRef<{ id: number; y: number; at: number } | null>(null);
+  const press = useRef<{ id: number; at: number } | null>(null);
   const text = composerText.value;
   const state = capture.value;
   const busy = state.kind !== 'idle';
@@ -57,14 +53,8 @@ export default function Composer() {
     }
     if (s.kind !== 'idle') return;
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    press.current = { id: e.pointerId, y: e.clientY, at: performance.now() };
+    press.current = { id: e.pointerId, at: performance.now() };
     void startRecording('pending');
-  };
-
-  const onMicMove = (e: PointerEvent) => {
-    const p = press.current;
-    if (!p || p.id !== e.pointerId) return;
-    setCancelArmed(p.y - e.clientY > CANCEL_PX);
   };
 
   const onMicUp = (e: PointerEvent) => {
@@ -142,7 +132,6 @@ export default function Composer() {
             aria-label={t('composer.mic')}
             aria-pressed={state.kind === 'recording'}
             onPointerDown={onMicDown}
-            onPointerMove={onMicMove}
             onPointerUp={onMicUp}
             onPointerCancel={onMicCancel}
             onClick={onMicClick}

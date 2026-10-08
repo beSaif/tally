@@ -152,15 +152,6 @@ describe('a press that is going to prompt', () => {
     expect(capture.value).toEqual({ kind: 'error', input: null, code: 'micDenied' });
   });
 
-  it('ignores sliding up: nothing is held', async () => {
-    permission = 'prompt';
-    const { capture, setCancelArmed, startRecording } = await load();
-    void startRecording('pending');
-    await settle();
-    setCancelArmed(true);
-    expect(capture.value).toMatchObject({ gesture: 'tap', cancelArmed: false });
-  });
-
   it('is treated the same when the choice was denied for good', async () => {
     permission = 'denied';
     const { capture, startRecording } = await load();
@@ -195,7 +186,7 @@ describe('with the microphone already granted', () => {
     await settle();
     now = 100;
     releaseRecording(100);
-    expect(capture.value).toMatchObject({ kind: 'recording', gesture: 'tap', cancelArmed: false });
+    expect(capture.value).toMatchObject({ kind: 'recording', gesture: 'tap' });
     expect(micDevice()?.state).toBe('recording');
   });
 
@@ -212,19 +203,6 @@ describe('with the microphone already granted', () => {
     expect(micDevice()?.state).toBe('recording');
   });
 
-  it('a hold slid up cancels on release', async () => {
-    const { capture, startRecording, releaseRecording, setCancelArmed } = await load();
-    void startRecording('pending');
-    mic.resolve(stream);
-    await settle();
-    setCancelArmed(true);
-    expect(capture.value).toMatchObject({ gesture: 'pending', cancelArmed: true });
-    now = 900;
-    releaseRecording(900);
-    expect(capture.value).toEqual({ kind: 'idle' });
-    expect(stream.track.stopped).toBe(true);
-  });
-
   it('a slow start still waits for the release: the API said no prompt would come', async () => {
     const { capture, startRecording } = await load();
     void startRecording('pending');
@@ -238,13 +216,12 @@ describe('with the microphone already granted', () => {
 
 describe('a pointercancel (the system took the touch)', () => {
   it('keeps listening in tap mode instead of discarding the note', async () => {
-    const { capture, keepListening, startRecording, setCancelArmed } = await load();
+    const { capture, keepListening, startRecording } = await load();
     void startRecording('pending');
     mic.resolve(stream);
     await settle();
-    setCancelArmed(true);
     keepListening();
-    expect(capture.value).toMatchObject({ kind: 'recording', gesture: 'tap', cancelArmed: false });
+    expect(capture.value).toMatchObject({ kind: 'recording', gesture: 'tap' });
     expect(micDevice()?.state).toBe('recording');
     expect(stream.track.stopped).toBe(false);
   });

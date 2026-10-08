@@ -50,7 +50,7 @@ function Routed() {
   return (
     <>
       <ScreenView screen={result.screen} />
-      <ToastHost withComposer={result.screen === 'home'} />
+      <ToastHost withComposer={result.screen === 'home' || (result.screen === 'overview' && Boolean(geminiKey.value))} />
     </>
   );
 }
