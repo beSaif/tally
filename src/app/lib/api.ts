@@ -11,6 +11,7 @@ import type {
   DeleteAccountInput,
   Entry,
   EntryPatch,
+  MonthsSummary,
   ErrorCode,
   NewEntry,
   PushSubscriptionInput,
@@ -140,6 +141,7 @@ export const api = {
 
   // ---- reports ----
   summary: (query: SummaryQuery, opts?: RequestOptions) => request<Summary>('GET', `/summary${q({ ...query })}`, undefined, opts),
+  summaryMonths: (from: string, to: string, opts?: RequestOptions) => request<MonthsSummary>('GET', `/summary/months${q({ from, to })}`, undefined, opts),
   exportUrl: (from: string, to: string) => `/api/export.csv${q({ from, to })}`,
 
   // ---- push ----

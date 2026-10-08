@@ -32,7 +32,7 @@ test('switching to French in Settings translates every screen', async ({ page })
   await expect(page.locator('.daygrp').nth(0)).toContainText('Aujourd’hui');
   await expect(page.locator('.daygrp').nth(1)).toContainText('Hier');
   await expect(page.locator('.daygrp').nth(2)).toContainText('sam. 03');
-  await expect(page.getByRole('button', { name: 'Ouvrir l’aperçu' })).toHaveText('oct. 2026');
+  await expect(page.getByRole('tablist', { name: 'Vues' }).getByRole('tab', { selected: true })).toHaveText('Journal');
   await expect(page.getByLabel('Décrivez une dépense')).toHaveAttribute('placeholder', 'Café 4.50 — ou dites-le');
   await shot(page, 'fr-home');
 
@@ -59,13 +59,15 @@ test('switching to French in Settings translates every screen', async ({ page })
   await page.keyboard.press('Escape');
   await page.getByLabel('Décrivez une dépense').fill('');
 
-  // Overview.
-  await page.getByRole('button', { name: 'Ouvrir l’aperçu' }).click();
+  // Analytics.
+  await page.getByRole('tablist', { name: 'Vues' }).getByRole('tab', { name: 'Analyse' }).click();
   await expect(page.getByRole('heading', { name: 'octobre 2026' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Semaine' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Mois' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.stats')).toHaveText('33 dépenses · moy. 257.68 / jour');
   await expect(page.getByRole('link', { name: 'Exporter en CSV →' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Rapport · octobre →' })).toHaveAttribute('href', '/report?m=2026-10');
+  await expect(page.locator('.bars .share').first()).toHaveText(`32${NNBSP}%`);
   await expect(page.getByLabel('Interroger vos dépenses')).toHaveAttribute('placeholder', `Demandez${NNBSP}: «${NNBSP}combien en café ce mois-ci${NNBSP}?${NNBSP}»`);
   await page.getByLabel('Interroger vos dépenses').fill('Combien ce mois-ci ?');
   await page.getByRole('button', { name: 'Demander' }).click();

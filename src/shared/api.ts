@@ -104,6 +104,19 @@ export interface Summary {
   previous?: { total_cents: number; count: number };
 }
 
+/** One calendar month of `GET /api/summary/months`: its total and per-category totals. */
+export interface MonthSummary {
+  month: string; // 'YYYY-MM'
+  total_cents: number;
+  count: number;
+  by_category: SummaryCategory[];
+}
+
+/** `GET /api/summary/months?from=YYYY-MM&to=YYYY-MM`: every month in the range, oldest first, empty ones included. */
+export interface MonthsSummary {
+  months: MonthSummary[];
+}
+
 // ---- auth ----
 /** Why a Google sign-in came back to `/login` without a session (the `error` query parameter). */
 export type SignInError = 'cancelled' | 'failed' | 'signups_disabled';

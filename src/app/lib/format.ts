@@ -39,6 +39,11 @@ export function monthLongYear(day: string, language: ResolvedLanguage): string {
   return `${p.month ?? ''} ${p.year ?? ''}`.trim();
 }
 
+/** "Oct" / "oct.". */
+export function monthShort(day: string, language: ResolvedLanguage): string {
+  return parts(dayToDate(day), language, { month: 'short' }).month ?? '';
+}
+
 /** "September" / "septembre". */
 export function monthLong(day: string, language: ResolvedLanguage): string {
   return parts(dayToDate(day), language, { month: 'long' }).month ?? '';

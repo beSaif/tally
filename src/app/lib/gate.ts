@@ -1,5 +1,5 @@
 /** The auth gate (spec §3): which screen a path shows, and where to redirect. Pure for testing. */
-export type Screen = 'login' | 'privacy' | 'setup' | 'home' | 'overview' | 'settings';
+export type Screen = 'login' | 'privacy' | 'setup' | 'home' | 'overview' | 'report' | 'settings';
 
 export interface GateInput {
   path: string;
@@ -14,7 +14,7 @@ export interface GateResult {
   redirect?: string;
 }
 
-const APP_SCREENS: Record<string, Screen> = { '/': 'home', '/overview': 'overview', '/settings': 'settings' };
+const APP_SCREENS: Record<string, Screen> = { '/': 'home', '/overview': 'overview', '/report': 'report', '/settings': 'settings' };
 
 export function gate({ path, authed, hasKey, setupComplete }: GateInput): GateResult {
   const p = path.length > 1 ? path.replace(/\/+$/, '') : path;

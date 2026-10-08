@@ -18,6 +18,6 @@
   ],
   "shortcuts": [
     { "name": "Log an expense", "short_name": "Log", "url": "/?compose=1", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Overview", "short_name": "Overview", "url": "/overview", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Analytics", "short_name": "Analytics", "url": "/overview", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

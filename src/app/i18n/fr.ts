@@ -94,7 +94,6 @@ export const fr: Dict = {
   'home.showMonth': 'Voir {month} →',
   'home.monthEmpty': 'Rien de noté.',
   'home.loadFailed': 'Impossible de charger vos dépenses.',
-  'home.openOverview': 'Ouvrir l’aperçu',
 
   // ---- composer ----
   'composer.label': 'Décrivez une dépense',
@@ -165,8 +164,12 @@ export const fr: Dict = {
   'entry.saveFailed': 'Impossible d’enregistrer. Réessayez.',
   'entry.deleteFailed': 'Impossible de supprimer. Réessayez.',
 
+  // ---- views (ledger | analytics) ----
+  'nav.views': 'Vues',
+  'nav.ledger': 'Journal',
+  'nav.analytics': 'Analyse',
+
   // ---- overview ----
-  'overview.title': 'Aperçu',
   'overview.week': 'Semaine',
   'overview.month': 'Mois',
   'overview.year': 'Année',
@@ -187,6 +190,36 @@ export const fr: Dict = {
   'overview.ask': 'Demander',
   'overview.askNoKey': 'Ajoutez votre clé Gemini dans les réglages pour poser des questions.',
   'overview.askThinking': 'Gemini réfléchit',
+  'overview.share': '{share} %',
+  'overview.shareLabel': '{share} % du total',
+  'overview.openCategory': '{name} : dépenses et tendance',
+  'overview.report': 'Rapport · {month} →',
+
+  // ---- category (analytics drill-down) ----
+  'category.ofPeriod': '{share} % de {period}',
+  'category.entries_one': '{count} dépense',
+  'category.entries_other': '{count} dépenses',
+  'category.trend': '6 derniers mois',
+  'category.loadFailed': 'Impossible de charger ces dépenses.',
+
+  // ---- monthly report ----
+  'report.title': 'Rapport',
+  'report.label': 'Rapport mensuel',
+  'report.inProgress': 'Mois en cours',
+  'report.prev': 'Mois précédent',
+  'report.next': 'Mois suivant',
+  'report.ofBudget': '{pct} % du budget de {budget}',
+  'report.vsPrev': '{delta} % par rapport à {month} ({diff})',
+  'report.noPrev': 'Rien de noté en {month} pour comparer.',
+  'report.entries': 'Dépenses',
+  'report.avgDay': 'Moy. / jour',
+  'report.busiest': 'Jour le plus cher',
+  'report.byCategory': 'Par catégorie',
+  'report.biggest': 'Plus grosses dépenses',
+  'report.history': '6 derniers mois',
+  'report.pdf': 'Enregistrer en PDF',
+  'report.empty': 'Rien de noté en {month}.',
+  'report.loadFailed': 'Impossible de charger ce rapport.',
 
   // ---- settings ----
   'settings.title': 'Réglages',

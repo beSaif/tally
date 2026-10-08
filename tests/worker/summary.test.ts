@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ApiErrorBody, Category, NewEntry, Summary } from '@shared/api';
+import type { ApiErrorBody, Category, MonthsSummary, NewEntry, Summary } from '@shared/api';
 import { api, signup, type Session } from './helpers';
 
 async function createEntries(s: Session, entries: Array<Partial<NewEntry>>): Promise<void> {
@@ -181,5 +181,70 @@ describe('summary', () => {
     expect(bResult.by_category).toEqual([
       { category_id: (await categoryIds(b)).Dining, name: 'Dining', total_cents: 100_000, count: 1, prev_total_cents: 0 },
     ]);
+  });
+});
+
+describe('summary by month', () => {
+  async function months(s: Session, query: string): Promise<MonthsSummary> {
+    const res = await api(`/api/summary/months?${query}`, { cookie: s.cookie });
+    expect(res.status, query).toBe(200);
+    return (await res.json()) as MonthsSummary;
+  }
+
+  it('requires a session', async () => {
+    expect((await api('/api/summary/months?from=2026-09&to=2026-10')).status).toBe(401);
+  });
+
+  it('totals each month by category, oldest first, empty months included', async () => {
+    const s = await signup();
+    const ids = await categoryIds(s);
+    await seed(s);
+    expect(await months(s, 'from=2026-08&to=2026-11')).toEqual({
+      months: [
+        { month: '2026-08', total_cents: 0, count: 0, by_category: [] },
+        {
+          month: '2026-09',
+          total_cents: 11999,
+          count: 4,
+          by_category: [
+            { category_id: ids.Dining, name: 'Dining', total_cents: 9999, count: 1 },
+            { category_id: ids.Groceries, name: 'Groceries', total_cents: 1000, count: 1 },
+            { category_id: ids.Fun, name: 'Fun', total_cents: 700, count: 1 },
+            { category_id: null, name: null, total_cents: 300, count: 1 },
+          ],
+        },
+        {
+          month: '2026-10',
+          total_cents: 10930,
+          count: 5,
+          by_category: [
+            { category_id: ids.Dining, name: 'Dining', total_cents: 4200, count: 1 },
+            { category_id: ids.Groceries, name: 'Groceries', total_cents: 4000, count: 2 },
+            { category_id: ids.Transport, name: 'Transport', total_cents: 2280, count: 1 },
+            { category_id: null, name: null, total_cents: 450, count: 1 },
+          ],
+        },
+        { month: '2026-11', total_cents: 5000, count: 1, by_category: [{ category_id: ids.Groceries, name: 'Groceries', total_cents: 5000, count: 1 }] },
+      ],
+    });
+  });
+
+  it('rejects malformed, reversed and over-long ranges', async () => {
+    const s = await signup();
+    for (const query of ['from=2026-09', 'from=2026-13&to=2026-12', 'from=2026-9&to=2026-10', 'from=2026-10&to=2026-09', 'from=2024-10&to=2026-10']) {
+      const res = await api(`/api/summary/months?${query}`, { cookie: s.cookie });
+      expect(res.status, query).toBe(400);
+      expect((await errorOf(res)).code).toBe('validation');
+    }
+    expect((await months(s, 'from=2024-11&to=2026-10')).months).toHaveLength(24);
+  });
+
+  it("never counts another user's entries", async () => {
+    const a = await signup();
+    const b = await signup();
+    await seed(a);
+    await createEntries(b, [{ occurred_at: '2026-10-02T10:00', category: 'Dining', amount_cents: 100_000 }]);
+    const { months: list } = await months(b, 'from=2026-09&to=2026-10');
+    expect(list.map((m) => m.total_cents)).toEqual([0, 100_000]);
   });
 });

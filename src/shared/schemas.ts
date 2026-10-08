@@ -55,6 +55,8 @@ export const summaryQuerySchema = z.object({
   prev_from: daySchema.optional(),
   prev_to: daySchema.optional(),
 });
+export const monthSchema = z.string().refine((s) => /^\d{4}-\d{2}$/.test(s) && isValidDay(`${s}-01`), 'expected YYYY-MM');
+export const monthsQuerySchema = z.object({ from: monthSchema, to: monthSchema });
 
 export const pushSubscribeSchema = z.object({
   subscription: z.object({

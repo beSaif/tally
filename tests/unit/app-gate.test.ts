@@ -29,6 +29,7 @@ describe('gate', () => {
   it('routes a ready account, and sends unknown paths home', () => {
     expect(gate({ path: '/', ...ready })).toEqual({ screen: 'home' });
     expect(gate({ path: '/overview', ...ready })).toEqual({ screen: 'overview' });
+    expect(gate({ path: '/report', ...ready })).toEqual({ screen: 'report' });
     expect(gate({ path: '/settings', ...ready })).toEqual({ screen: 'settings' });
     expect(gate({ path: '/login', ...ready })).toEqual({ screen: 'home', redirect: '/' });
     expect(gate({ path: '/setup', ...ready })).toEqual({ screen: 'home', redirect: '/' });

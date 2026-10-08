@@ -600,16 +600,241 @@ button.link {
   font-size: 14px;
   padding: 10px 0;
 }
-.export {
-  display: inline-block;
-  align-self: flex-start;
+.ov-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 22px;
   margin-top: 14px;
+}
+.ov-links a {
+  display: inline-block;
   padding: 6px 0;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--mute);
   text-decoration: none;
   text-transform: uppercase;
+}
+.ov-links a:first-child {
+  color: var(--ink);
+}
+
+/* ---------- ledger | analytics switch ---------- */
+.topline .views {
+  display: inline-flex;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: -5px 0;
+}
+.topline .views button {
+  margin: 0;
+  padding: 5px 9px;
+  font-size: 10.5px;
+}
+.topline .views button + button {
+  border-left: 1px solid var(--ink);
+}
+.topline .views .on {
+  background: var(--ink);
+  color: #fff;
+}
+
+/* ---------- category drill-down ---------- */
+.bars.open li {
+  padding: 0;
+}
+.bar-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 0;
+  cursor: pointer;
+}
+.bars .track,
+.bars .fill {
+  display: block;
+}
+.bars .share {
+  color: var(--mute);
+  font-size: 11px;
+  margin-right: 10px;
+}
+.bars .chev {
+  color: var(--faint);
+  margin-left: 6px;
+}
+.lbl.sec {
+  margin: 26px 0 8px;
+}
+.cat-sheet .amount-row {
+  margin-top: 10px;
+}
+.cat-sheet .stats {
+  margin-top: 10px;
+}
+.cat-sheet .day:first-of-type .daygrp {
+  margin-top: 22px;
+}
+
+/* ---------- month columns ---------- */
+.cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  height: 128px;
+}
+.cols li {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+.cols .v,
+.cols .m {
+  font-family: var(--mono);
+  font-feature-settings: 'tnum' 1;
+  font-size: 10px;
+  color: var(--mute);
+  text-align: center;
+  white-space: nowrap;
+}
+.cols .m {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-top: 6px;
+  border-top: 1px solid var(--ink);
+}
+.cols .col {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  padding: 4px 0 0;
+}
+.cols .bar {
+  display: block;
+  width: 100%;
+  background: var(--ink);
+  border-radius: 2px 2px 0 0;
+}
+.cols .on .bar {
+  background: var(--acc);
+}
+.cols .on .v,
+.cols .on .m {
+  color: var(--ink);
+}
+.cols-ph {
+  height: 128px;
+}
+
+/* ---------- monthly report ---------- */
+.rp-kicker {
+  margin-top: 18px;
+}
+.report .period {
+  margin-top: 4px;
+}
+.rp-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  padding: 0 4px;
+}
+.rp-total {
+  margin-top: 14px;
+}
+.rp-total .stats {
+  margin: 12px 0 8px;
+}
+.rp-vs {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-feature-settings: 'tnum' 1;
+  font-size: 11px;
+  color: var(--ink2);
+  text-transform: uppercase;
+}
+.rp-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 22px;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.rp-stats > div {
+  padding: 10px 10px 12px 0;
+}
+.rp-stats > div + div {
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.rp-stats dd {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-feature-settings: 'tnum' 1;
+  font-size: 15px;
+  font-weight: 500;
+}
+.rp-stats .sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--mute);
+  margin-top: 2px;
+}
+.rp-biggest {
+  border-top: 1px solid var(--ink);
+}
+.rp-biggest li {
+  grid-template-columns: 52px 1fr auto;
+}
+.rp-pending {
+  min-height: 320px;
+}
+.rp-actions {
+  margin: 30px 0 calc(30px + var(--safe-b));
+  column-gap: 20px;
+}
+.rp-actions .btn {
+  width: auto;
+  height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+}
+
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+  .report {
+    max-width: none;
+    min-height: 0;
+    padding: 0;
+  }
+  .report .topline,
+  .report .period button,
+  .rp-actions,
+  .toast-region {
+    display: none !important;
+  }
+  .report .period {
+    margin-left: 0;
+  }
+  .report section,
+  .rp-stats,
+  .bars li,
+  .rp-biggest li,
+  .cols {
+    break-inside: avoid;
+  }
+  .report * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 .ask {
   margin-top: 18px;

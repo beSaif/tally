@@ -11,6 +11,7 @@ import AuthScreen from './screens/Auth';
 import Home from './screens/Home';
 import Overview from './screens/Overview';
 import Privacy from './screens/Privacy';
+import Report from './screens/Report';
 import Settings from './screens/Settings';
 import Setup from './screens/Setup';
 
@@ -64,6 +65,8 @@ function ScreenView({ screen }: { screen: Screen }) {
       return <Setup />;
     case 'overview':
       return <Overview />;
+    case 'report':
+      return <Report />;
     case 'settings':
       return <Settings />;
     default:

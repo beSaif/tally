@@ -177,7 +177,7 @@ Rendered with hard edges (`shape-rendering:crispEdges`, nearest-neighbour). File
 
 ## 3. Screens and flows
 
-Routes (History API, SPA fallback served by the Worker): `/login`, `/privacy` (public), `/setup`, `/` (home), `/overview`, `/settings`.
+Routes (History API, SPA fallback served by the Worker): `/login`, `/privacy` (public), `/setup`, `/` (home), `/overview` (analytics), `/report?m=YYYY-MM`, `/settings`.
 Auth gate: unauthenticated → `/login` (the old `/signup` too). Authenticated but (no Gemini key on this device) or (`settings.setup_complete` false) → `/setup`.
 Everything renders inside `.screen`; on desktop the column is centred (max 520px) with the composer/sheets aligned to it.
 All copy is localised (§4). Strings below are English; FR equivalents live in `i18n/fr.ts`.
@@ -201,7 +201,7 @@ Default categories by language: EN `Groceries, Dining, Transport, Home, Health, 
 
 ### 3.3 Home (design A.1)
 
-- `.topline`: left `.wordmark` (tap → `/settings`); right: a button "OCT 2026" (current month, mono uppercase; tap → `/overview`) followed by a 28px ghost gear icon (tap → `/settings`).
+- `.topline`: left `.wordmark` (tap → `/settings`); right: the **Ledger | Analytics** switch (a two-tab `.views` pill, mono 10.5px uppercase, the current one inked; Analytics pushes `/overview`, Ledger goes back to `/`, so the phone's back button matches) followed by a 28px ghost gear icon (tap → `/settings`). Home and Analytics share this top line.
 - Hero (padding 22px 0 18px): `.lbl` "Spent this month" · `.big` 58px total with faint decimals + `.cur` currency · row (margin-top 14px) mono 11px mute: left `"64% OF 2 000"` (only when a budget is set; `round(total/budget*100)`; budget formatted without decimals when whole), right `"26 DAYS LEFT"` (days remaining after today) · `.track`/`.fill` width = min(100, pct)% (fill turns `--acc` at ≥100%). Without budget: only the "days left" text, no bar.
 - Entries, grouped by day (newest day first, newest entry first within a day): `.daygrp` label "TODAY" / "YESTERDAY" / "SUN 04" (weekday short + day) with the day total on the right; `.entries` rows: time `HH:MM`, name + category (uncategorised shows "Other"), amount. Tap a row → **Entry sheet** (§3.7). Rows added in this session get a 1.5s fading `--acc` 2px left bar.
 - The list shows the current month. At the bottom a mono 11px link "SHOW SEPTEMBER →" loads the previous month under a `.daygrp`-style month header "SEPTEMBER 2026 · 1 102.30"; repeatable. Bottom padding leaves room for the composer (≈ 120px + safe-area).
@@ -234,15 +234,29 @@ Error: a 14px `--err` line mapped from the Gemini error code (invalid key → "G
 
 Saving: `POST /api/entries { entries:[…] }` with `source` = `voice|text|photo` and `raw_input` = transcript/text/`"photo"`. Close the sheet, scroll the list to top, highlight the new rows. On a 4xx/5xx keep the sheet open and show the error line.
 
-### 3.6 Overview (design A.3 + C.3)
+### 3.6 Analytics (design A.3 + C.3)
 
-- `.topline`: left "← BACK" (button) · right "OVERVIEW".
+The screen at `/overview` (the path predates the name).
+
+- `.topline`: the Home top line (§3.3) with Analytics selected.
 - `.tabs`: Week · Month · Year (default Month; remembered in the URL `?p=week|month|year`).
 - Period row: `.lbl` with ‹ › arrows: "‹ OCTOBER 2026 ›" (Week: "WEEK 41 · 5–11 OCT"; Year: "2026"). › is disabled beyond the current period.
 - `.big` 46px total + `.cur`. Below it mono 11px mute: "12 ENTRIES · AVG 42.80 / DAY" (Week/Month) or "AVG 1 102.30 / MONTH" (Year).
-- `.bars`: categories sorted by total desc; the first bar is `--acc`, the rest `--ink`; widths relative to the top category. Name on the left; when the previous period has a total for that category show a delta `+18%` in mono 11px mute after the name (design C.3). Uncategorised entries appear as "Other".
-- Row: mono 11px mute link "EXPORT CSV →" — `<a href="/api/export.csv?from=…&to=…" download>`.
+- `.bars`: categories sorted by total desc; the first bar is `--acc`, the rest `--ink`; widths relative to the top category. Name on the left; when the previous period has a total for that category show a delta `+18%` in mono 11px mute after the name (design C.3). Uncategorised entries appear as "Other". Right of each name: the category's share of the period total (`32%`, mono 11px mute), the amount and a faint `›`.
+- **Category drill-down**: each bar is a button opening a sheet: the category name, its total, "12% OF OCTOBER 2026 · 6 ENTRIES", **Last 6 months** as columns (`GET /summary/months`; the six months ending at the period's month, or the current month for a period still running; the period's month in `--acc`, values rounded to whole units above each column) and the category's entries for the period grouped by day. Tapping an entry closes the sheet and opens the Entry sheet (§3.7); closing that recounts the period.
+- Row: mono 11px links: (Month only, ink) "OCTOBER REPORT →" → `/report?m=2026-10` · (mute) "EXPORT CSV →" — `<a href="/api/export.csv?from=…&to=…" download>`.
 - **Ask your data** (design C.3): a `.cbox` with placeholder `Ask: "how much on coffee this month?"` and a `.ibtn.dark` send. The answer renders **above** the box as the C.3 paragraph: 26px/700/-.03em/line-height 1.12 with amounts wrapped in `.mono` 500 and the first category name in `--acc` (if the answer contains one). While waiting: three pulsing dots. Only the latest answer is kept. Context sent to Gemini = the entries of the visible period (§7.5). If this device has no key, the box shows "Add your Gemini key in Settings to ask questions." instead.
+
+### 3.6.1 Monthly report (`/report?m=YYYY-MM`)
+
+A month that has begun; anything else (missing, malformed, future) shows last month. `.topline` "← BACK" (to Analytics when the report was the first page) / "REPORT".
+
+- `.lbl` "MONTHLY REPORT" ("MONTH IN PROGRESS" for the current month) · the month name 26px/700 between ‹ › (› disabled at the current month; changes `?m=`).
+- `.big` total + currency · with a budget: "55% OF THE 2 000 BUDGET" and a `.track` · "−4% VS AUGUST (−47.70)", or "NOTHING LOGGED IN AUGUST TO COMPARE WITH."
+- Three stats: Entries · Avg / day (over the month's elapsed days) · Busiest day ("Tue 01" with its total).
+- **By category**: the Analytics bars with shares and deltas, not tappable. **Biggest expenses**: the five largest entries (date, what, category, amount). **Last 6 months**: monthly totals as columns, the report's month in `--acc`.
+- "Save as PDF" (`.btn.primary`) calls `window.print()` with the document title set to "Tally · September 2026" (the PDF's file name); print styles drop the top line, arrows, actions and toasts. "EXPORT CSV →" for the month.
+- A month with nothing logged: "Nothing logged in August."
 
 ### 3.7 Entry sheet (edit / delete an existing entry)
 
@@ -328,6 +342,7 @@ request origin (else 403). `requireUser` middleware puts `{ id, email }` on `c.v
 | `POST /entries` | `{ entries: NewEntry[] }` (1..50) → 201 `{ entries }`. `NewEntry = { amount_cents, currency?, description, category_id?: string\|null, category?: string\|null (name; resolved case-insensitively to an id, unknown → null), occurred_at, note?, source, raw_input? }`. Triggers budget alerts (§8.4). |
 | `PATCH /entries/:id` | `Partial<NewEntry>` → `{ entry }`. 404 if not the user's. Triggers budget alerts. |
 | `DELETE /entries/:id` | → 204. |
+| `GET /summary/months?from=YYYY-MM&to=YYYY-MM` | → `MonthsSummary` = `{ months: [{ month, total_cents, count, by_category: [{ category_id, name, total_cents, count }] }] }`, every month of the range oldest first (empty months included), at most 24. Categories within a month sorted like `/summary`. |
 | `GET /summary?from&to&prev_from?&prev_to?` | → `Summary` = `{ from, to, total_cents, count, by_category: [{ category_id, name, total_cents, count, prev_total_cents? }], by_day: [{ day, total_cents, count }], previous?: { total_cents, count } }`. Categories sorted by `total_cents` desc; uncategorised as `{ category_id: null, name: null }`. |
 | `GET /export.csv?from&to` | `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="tally-<from>_<to>.csv"`. Header `date,time,amount,currency,description,category,note,source,id`; RFC 4180 quoting; amount as `12.50`; UTF-8 BOM. |
 | `GET /push/vapid-public-key` | → `{ key }` (base64url of the 65-byte uncompressed P-256 public key). |
@@ -439,7 +454,7 @@ Key storage: `localStorage['tally.gemini.key']`; model comes from server setting
 - Disable on this device: `sub.unsubscribe()` + `DELETE /api/push/subscriptions/:id`.
 - Preferences (reminder on/off, time, only-if-empty, budget, weekly, monthly) are **account-wide** settings (`PUT /api/settings`).
 - `sw.ts`: `push` → `event.waitUntil(self.registration.showNotification(payload.title, { body, tag, data:{ url, kind }, icon:'/icons/icon-192.png', badge:'/icons/badge-96.png' (monochrome receipt on transparent), actions, renotify:false, lang }))`; `notificationclick` → if `action === 'skip'` → `fetch('/api/push/skip', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ day }) })` then close; else focus an open client (`clients.matchAll({type:'window', includeUncontrolled:true})`) and `navigate(url)` or `clients.openWindow(url)`. `pushsubscriptionchange` → re-subscribe with the stored key and POST to `/api/push/subscribe`.
-- Deep links: `/?compose=1` focuses the composer; `/overview?p=month` opens the month report; `/overview?p=week`.
+- Deep links: `/?compose=1` focuses the composer; `/overview?p=month` opens the month in Analytics; `/report?m=2026-09` the monthly report; `/overview?p=week`.
 
 ### 8.2 Payload (JSON, encrypted end-to-end by Web Push)
 
@@ -464,7 +479,7 @@ Cron `*/15 * * * *`. For every user with ≥1 subscription, group subscriptions 
 | --- | --- | --- | --- | --- |
 | `reminder` | from `notif_reminder_time` until 59 min after (never early; a window past midnight belongs to the day it opened on) | `notif_reminder` and no `reminder_skips` row for the day and (not `only_if_empty` or no entries that day) | `YYYY-MM-DD@<tz>` | EN "Anything spent today? One sentence is enough." · actions **Log now** (`/?compose=1`), **Skip today** |
 | `weekly` | Monday 09:00–09:59 | `notif_weekly` and ≥1 entry last ISO week | `YYYY-Www@<tz>` of last week | title "Last week: 256.90 CHF" · body "Groceries led at 41% · 12 entries" (or "+8% vs the week before" when previous week > 0) · url `/overview?p=week` |
-| `monthly` | 1st, 09:00–09:59 | `notif_monthly` and ≥1 entry last month | `YYYY-MM@<tz>` of last month | title "September: 1 284.60 CHF" · body "64% of your budget · Groceries 412.30 led" (no budget: "Groceries 412.30 led · 38 entries") · url `/overview?p=month` |
+| `monthly` | 1st, 09:00–09:59 | `notif_monthly` and ≥1 entry last month | `YYYY-MM@<tz>` of last month | title "September: 1 284.60 CHF" · body "64% of your budget · Groceries 412.30 led" (no budget: "Groceries 412.30 led · 38 entries") · url `/report?m=YYYY-MM` of last month |
 | `budget` | immediately after `POST/PATCH /entries` (via `ctx.waitUntil`; once per month the batch touches) | `notif_budget`, a budget is set, the entry's month is the current local month of the device tz (use the first subscription's tz), and total ≥ threshold not yet logged | `YYYY-MM:50`/`:80`/`:100` | 50 → "Halfway through your budget" · 80 → "80% of your budget" · 100 → "Budget reached"; body "1 620.00 of 2 000 CHF · 17 days left" · url `/overview?p=month` · urgency high. Only the **highest** newly-crossed threshold is sent; all crossed thresholds are logged. |
 | `test` | `POST /push/test` | — | not logged | "Notifications are on" · "This is how Tally will nudge you." |
 
@@ -472,7 +487,7 @@ Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if
 
 ## 9. PWA
 
-- `public/manifest.webmanifest`: `name "Tally"`, `short_name "Tally"`, `description`, `start_url "/"`, `scope "/"`, `display "standalone"`, `background_color "#FFFFFF"`, `theme_color "#FFFFFF"`, `lang "en"`, icons (192, 512, maskable 512), `shortcuts` (Log an expense → `/?compose=1`; Overview → `/overview`).
+- `public/manifest.webmanifest`: `name "Tally"`, `short_name "Tally"`, `description`, `start_url "/"`, `scope "/"`, `display "standalone"`, `background_color "#FFFFFF"`, `theme_color "#FFFFFF"`, `lang "en"`, icons (192, 512, maskable 512), `shortcuts` (Log an expense → `/?compose=1`; Analytics → `/overview`).
 - `index.html`: `<meta name="theme-color" content="#FFFFFF">`, `viewport-fit=cover`, `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style default`, `apple-mobile-web-app-title Tally`, `<link rel="apple-touch-icon">`, `<link rel="icon" href="/icons/icon.svg">`, `<link rel="manifest">`.
 - Service worker via `vite-plugin-pwa` `injectManifest` from `src/app/sw.ts`: Workbox `precacheAndRoute(self.__WB_MANIFEST)`, `cleanupOutdatedCaches`, navigation route → `index.html` **except** `/api/*`; `/api/*` is never cached; `skipWaiting` on message; the app shows a toast "Update ready · RELOAD" when a new SW is waiting.
 - The Worker serves `dist/` as static assets with `not_found_handling: "single-page-application"` and `run_worker_first: ["/api/*"]`.
@@ -480,7 +495,7 @@ Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if
 ## 10. Testing
 
 - **Unit (node)**: `formatAmount`, `parseAmount`, period helpers (ISO week, month/year ranges, days left), CSV escaping, Gemini request builder (exact body), response parsing (fenced JSON, missing fields, zod failures → `bad_response`), WAV encoder header/bytes, i18n key parity, push payload builder.
-- **Worker**: Google sign-in start (redirect parameters, cookie) and callback (PKCE code exchange, claim checks, account creation per language, repeat sign-ins, address change, every refusal) against a stand-in token endpoint (`vi.spyOn(globalThis, 'fetch')`); logout/me; signups disabled; cookie flags; origin check; delete by email; settings validation; categories replace semantics (rename keeps id, delete nulls entries); entries CRUD + batch + range validation + user isolation; summary math incl. previous period + by_day; CSV content; push subscribe/upsert/list/delete/skip; webpush RFC 8291 vector + VAPID header shape; scheduled: reminder window match, only-if-empty, skip, dedup, weekly/monthly keys, budget thresholds (highest only, logged all), subscription cleanup on 410.
+- **Worker**: Google sign-in start (redirect parameters, cookie) and callback (PKCE code exchange, claim checks, account creation per language, repeat sign-ins, address change, every refusal) against a stand-in token endpoint (`vi.spyOn(globalThis, 'fetch')`); logout/me; signups disabled; cookie flags; origin check; delete by email; settings validation; categories replace semantics (rename keeps id, delete nulls entries); entries CRUD + batch + range validation + user isolation; summary math incl. previous period + by_day, and month by month; CSV content; push subscribe/upsert/list/delete/skip; webpush RFC 8291 vector + VAPID header shape; scheduled: reminder window match, only-if-empty, skip, dedup, weekly/monthly keys, budget thresholds (highest only, logged all), subscription cleanup on 410.
 - **E2E (Playwright, Chromium 1194 at `/opt/pw-browsers`, viewport 390×844, DPR 2)**: Gemini mocked with `page.route('https://generativelanguage.googleapis.com/**')` returning fixtures; `PushManager.subscribe` faked via `addInitScript`; Google replaced by `e2e/support/fake-google.ts`, a local authorize + token endpoint that `wrangler dev` is pointed at with `--var`. Flows: sign in → setup (key check) → text log (single) → batch (three entries) → edit one → overview totals & bars → export CSV (download) → ask → settings: notifications on, test → logout → sign in again → data still there. Screenshots saved to `e2e/__screenshots__/` (git-ignored) for visual review against the design.
 
 ## 11. Security

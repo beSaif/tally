@@ -285,7 +285,7 @@ async function sendMonthly(run: Run, item: Due): Promise<void> {
       top: stats.top,
       budgetCents: settings.budget_cents,
     }),
-    url: '/overview?p=month',
+    url: `/report?m=${lastMonth.from.slice(0, 7)}`,
     tag: 'monthly',
     lang,
   }));

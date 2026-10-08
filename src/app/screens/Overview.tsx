@@ -1,15 +1,21 @@
-/** Overview (design A.3 + C.3, spec §3.6): week / month / year totals, category bars, export, ask. */
+/**
+ * Analytics (design A.3 + C.3, spec §3.6): week / month / year totals, category bars with a
+ * drill-down per category, the month's report, export, ask.
+ */
 import { useEffect, useState } from 'preact/hooks';
-import type { Summary } from '@shared/api';
+import type { Entry, Summary, SummaryCategory } from '@shared/api';
 import { periodRange, previousRange, shiftAnchor, type PeriodKind } from '@shared/dates';
 import { formatAmount } from '@shared/money';
 import { lang, t } from '../i18n';
 import { api, isAbortError } from '../lib/api';
-import { elapsedDays, elapsedMonths, periodLabel, todayLocal } from '../lib/format';
+import { elapsedDays, elapsedMonths, monthLong, periodLabel, todayLocal } from '../lib/format';
 import { currency } from '../lib/store';
-import { back, route, setQuery } from '../router';
+import { linkTo, route, setQuery } from '../router';
+import AppTopline from '../components/AppTopline';
 import AskBox from '../components/AskBox';
 import CategoryBars from '../components/CategoryBars';
+import CategorySheet from '../components/CategorySheet';
+import EntrySheet from '../components/EntrySheet';
 
 const KINDS: readonly PeriodKind[] = ['week', 'month', 'year'];
 
@@ -29,6 +35,8 @@ export default function Overview() {
   const canGoNext = nextRange.from <= today;
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [category, setCategory] = useState<SummaryCategory | null>(null);
+  const [entry, setEntry] = useState<Entry | null>(null);
   const language = lang.value;
 
   useEffect(() => {
@@ -56,14 +64,11 @@ export default function Overview() {
     stats = t('overview.stats', { count, avg: formatAmount(d > 0 ? Math.round(total / d) : 0) });
   }
 
+  const reportUrl = `/report?m=${range.from.slice(0, 7)}`;
+
   return (
     <main class="screen overview">
-      <header class="topline">
-        <button type="button" onClick={() => back('/')}>
-          {t('common.back')}
-        </button>
-        <span>{t('overview.title')}</span>
-      </header>
+      <AppTopline view="analytics" />
 
       <div class="tabs" role="tablist" aria-label={t('overview.periods')}>
         {KINDS.map((k) => (
@@ -112,14 +117,47 @@ export default function Overview() {
           </button>
         </p>
       ) : null}
-      {summary && summary.by_category.length > 0 ? <CategoryBars rows={summary.by_category} /> : null}
+      {summary && summary.by_category.length > 0 ? <CategoryBars rows={summary.by_category} totalCents={total} onOpen={setCategory} /> : null}
       {summary && summary.by_category.length === 0 ? <p class="ov-note">{t('overview.empty')}</p> : null}
 
-      <a class="export" href={api.exportUrl(range.from, range.to)} download>
-        {t('overview.export')}
-      </a>
+      <div class="ov-links">
+        {kind === 'month' ? (
+          <a href={reportUrl} onClick={linkTo(reportUrl)}>
+            {t('overview.report', { month: monthLong(range.from, language) })}
+          </a>
+        ) : null}
+        <a href={api.exportUrl(range.from, range.to)} download>
+          {t('overview.export')}
+        </a>
+      </div>
 
       <AskBox key={`${kind}:${range.from}`} periodLabel={label} range={range} summary={summary} />
+
+      {category ? (
+        <CategorySheet
+          key={`${category.category_id ?? 'other'}:${range.from}`}
+          category={category}
+          range={range}
+          periodLabel={label}
+          periodTotalCents={total}
+          onOpenEntry={(e) => {
+            setCategory(null);
+            setEntry(e);
+          }}
+          onClose={() => setCategory(null)}
+        />
+      ) : null}
+      {entry ? (
+        <EntrySheet
+          key={entry.id}
+          entry={entry}
+          onClose={() => {
+            setEntry(null);
+            // The entry may have moved category, amount or month: recount the period.
+            setAttempt((a) => a + 1);
+          }}
+        />
+      ) : null}
     </main>
   );
 }

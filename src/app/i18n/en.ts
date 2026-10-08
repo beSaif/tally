@@ -93,7 +93,6 @@ export const en = {
   'home.showMonth': 'Show {month} →',
   'home.monthEmpty': 'Nothing logged.',
   'home.loadFailed': 'Could not load your entries.',
-  'home.openOverview': 'Open the overview',
 
   // ---- composer ----
   'composer.label': 'Describe an expense',
@@ -164,8 +163,12 @@ export const en = {
   'entry.saveFailed': 'Could not save. Try again.',
   'entry.deleteFailed': 'Could not delete. Try again.',
 
+  // ---- views (ledger | analytics) ----
+  'nav.views': 'Views',
+  'nav.ledger': 'Ledger',
+  'nav.analytics': 'Analytics',
+
   // ---- overview ----
-  'overview.title': 'Overview',
   'overview.week': 'Week',
   'overview.month': 'Month',
   'overview.year': 'Year',
@@ -186,6 +189,36 @@ export const en = {
   'overview.ask': 'Ask',
   'overview.askNoKey': 'Add your Gemini key in Settings to ask questions.',
   'overview.askThinking': 'Gemini is thinking',
+  'overview.share': '{share}%',
+  'overview.shareLabel': '{share}% of the total',
+  'overview.openCategory': '{name}: entries and trend',
+  'overview.report': '{month} report →',
+
+  // ---- category (analytics drill-down) ----
+  'category.ofPeriod': '{share}% of {period}',
+  'category.entries_one': '{count} entry',
+  'category.entries_other': '{count} entries',
+  'category.trend': 'Last 6 months',
+  'category.loadFailed': 'Could not load these entries.',
+
+  // ---- monthly report ----
+  'report.title': 'Report',
+  'report.label': 'Monthly report',
+  'report.inProgress': 'Month in progress',
+  'report.prev': 'Previous month',
+  'report.next': 'Next month',
+  'report.ofBudget': '{pct}% of the {budget} budget',
+  'report.vsPrev': '{delta}% vs {month} ({diff})',
+  'report.noPrev': 'Nothing logged in {month} to compare with.',
+  'report.entries': 'Entries',
+  'report.avgDay': 'Avg / day',
+  'report.busiest': 'Busiest day',
+  'report.byCategory': 'By category',
+  'report.biggest': 'Biggest expenses',
+  'report.history': 'Last 6 months',
+  'report.pdf': 'Save as PDF',
+  'report.empty': 'Nothing logged in {month}.',
+  'report.loadFailed': 'Could not load this report.',
 
   // ---- settings ----
   'settings.title': 'Settings',

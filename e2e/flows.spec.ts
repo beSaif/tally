@@ -138,8 +138,8 @@ test('sign in, log, edit, delete, overview, export, ask, notifications, log out 
   expect(afterUndo).toHaveLength(3);
   expect(afterUndo.find((e) => e.description === 'Train → Lausanne')).toMatchObject({ amount_cents: 2280, note: '½ fare', category_name: 'Transport' });
 
-  // ---- overview: totals and bars
-  await page.getByRole('button', { name: 'Open the overview' }).click();
+  // ---- analytics: totals and bars
+  await page.getByRole('tablist', { name: 'Views' }).getByRole('tab', { name: 'Analytics' }).click();
   await expect(page).toHaveURL(/\/overview$/);
   await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible();
   await expect(page.locator('.ov-num')).toHaveText('52.30');
@@ -184,7 +184,7 @@ test('sign in, log, edit, delete, overview, export, ask, notifications, log out 
   await shot(page, 'flow-overview-ask', { fullPage: true });
 
   // ---- settings: notifications on this device, then a test notification
-  await page.getByRole('button', { name: '← Back' }).click();
+  await page.getByRole('tablist', { name: 'Views' }).getByRole('tab', { name: 'Ledger' }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.locator('.topline .ibtn').click();
   await expect(page).toHaveURL(/\/settings$/);

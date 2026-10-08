@@ -28,8 +28,11 @@ straight from your browser, and nobody but you ever sees your receipts.
   become several entries.
 - A confirm sheet shows what Gemini understood (amount, what, category, when, note) before
   anything is saved.
-- Month total with budget progress, entries grouped by day, an overview by category with deltas
-  against last period, CSV export.
+- Month total with budget progress and entries grouped by day, one tap away from Analytics:
+  spending by category with shares and deltas against last period, a drill-down into any category
+  with its last six months, and CSV export.
+- A monthly report for every month (total vs budget and the month before, categories, biggest
+  expenses, six-month history) that saves as a PDF; the first-of-month notification opens it.
 - Ask your data in plain language: "how much on coffee this month?"
 - Push notifications: a daily reminder, alerts at 50 / 80 / 100 % of budget, a Monday summary and
   a first-of-month report.

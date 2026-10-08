@@ -359,7 +359,7 @@ describe('monthly report', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.headers.get('TTL')).toBe('86400');
     expect(await payloadsFor(calls, sub)).toEqual([
-      { kind: 'monthly', title: `September: 1${NNBSP}284.60 CHF`, body: '64% of your budget · Groceries 412.30 led', url: '/overview?p=month', tag: 'monthly', lang: 'en' },
+      { kind: 'monthly', title: `September: 1${NNBSP}284.60 CHF`, body: '64% of your budget · Groceries 412.30 led', url: '/report?m=2026-09', tag: 'monthly', lang: 'en' },
     ]);
     expect(await logKeys(userId, 'monthly')).toEqual([ZURICH_KEY('2026-09')]);
 

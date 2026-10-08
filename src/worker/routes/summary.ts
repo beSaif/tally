@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import type { Summary, SummaryCategory } from '@shared/api';
-import type { DayRange } from '@shared/dates';
-import { summaryQuerySchema } from '@shared/schemas';
+import type { MonthSummary, MonthsSummary, Summary, SummaryCategory } from '@shared/api';
+import { addMonths, monthRange, type DayRange } from '@shared/dates';
+import { monthsQuerySchema, summaryQuerySchema } from '@shared/schemas';
 import type { AppEnv } from '../env';
 import { readQuery, validation } from '../lib/http';
 import { requireUser } from '../lib/auth';
@@ -32,6 +32,15 @@ const BY_DAY = `SELECT substr(occurred_at, 1, 10) AS day, SUM(amount_cents) AS t
   WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?
   GROUP BY day
   ORDER BY day`;
+
+const BY_MONTH_CATEGORY = `SELECT substr(e.occurred_at, 1, 7) AS month, e.category_id, c.name, SUM(e.amount_cents) AS total_cents, COUNT(*) AS count
+  FROM entries e LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = e.user_id
+  WHERE e.user_id = ? AND e.occurred_at >= ? AND e.occurred_at <= ?
+  GROUP BY month, e.category_id
+  ORDER BY month, total_cents DESC, c.name IS NULL, c.name`;
+
+/** Longest month range `GET /summary/months` accepts: two years. */
+export const MAX_MONTHS = 24;
 
 const sum = (rows: ReadonlyArray<{ total_cents: number; count: number }>) =>
   rows.reduce((acc, r) => ({ total_cents: acc.total_cents + r.total_cents, count: acc.count + r.count }), { total_cents: 0, count: 0 });
@@ -78,4 +87,30 @@ summaryRoutes.get('/', requireUser, async (c) => {
     ...(prevRows ? { previous: sum(prevRows) } : {}),
   };
   return c.json(summary);
+});
+
+/** Month-by-month totals per category (category trends, the monthly report's history). */
+summaryRoutes.get('/months', requireUser, async (c) => {
+  const q = readQuery(c, monthsQuerySchema);
+  if (q.from > q.to) throw validation('to: must not be before from');
+  const keys: string[] = [];
+  for (let day = `${q.from}-01`; day.slice(0, 7) <= q.to; day = addMonths(day, 1)) {
+    if (keys.length === MAX_MONTHS) throw validation(`to: a range spans at most ${MAX_MONTHS} months`);
+    keys.push(day.slice(0, 7));
+  }
+  const range: DayRange = { from: `${q.from}-01`, to: monthRange(`${q.to}-01`).to };
+  const { results } = await c.env.DB.prepare(BY_MONTH_CATEGORY)
+    .bind(c.var.user.id, ...occurredBounds(range))
+    .all<CategoryTotalRow & { month: string }>();
+
+  const byMonth = new Map<string, MonthSummary>(keys.map((month) => [month, { month, total_cents: 0, count: 0, by_category: [] }]));
+  for (const r of results) {
+    const m = byMonth.get(r.month);
+    if (!m) continue;
+    m.total_cents += r.total_cents;
+    m.count += r.count;
+    m.by_category.push({ category_id: r.category_id, name: r.name, total_cents: r.total_cents, count: r.count });
+  }
+  const body: MonthsSummary = { months: [...byMonth.values()] };
+  return c.json(body);
 });

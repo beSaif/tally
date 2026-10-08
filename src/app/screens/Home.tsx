@@ -4,19 +4,18 @@ import type { Entry } from '@shared/api';
 import { formatAmount } from '@shared/money';
 import { lang, t } from '../i18n';
 import { capture, composerFocusRequest } from '../lib/capture';
-import { monthLong, monthLongYear, monthShortYear, sumCents, todayLocal } from '../lib/format';
+import { monthLong, monthLongYear, sumCents, todayLocal } from '../lib/format';
 import { offerInstallOnce } from '../lib/install';
 import { freshIds, loadCurrentMonth, loadOlderMonth, months, nextOlderMonth, type MonthBlock } from '../lib/ledger';
 import { currency, settings } from '../lib/store';
 import { onAppVisible } from '../lib/visible';
-import { navigate, route, setQuery } from '../router';
+import { route, setQuery } from '../router';
+import AppTopline from '../components/AppTopline';
 import CaptureSheet from '../components/CaptureSheet';
 import Composer from '../components/Composer';
 import EntryList from '../components/EntryList';
 import EntrySheet from '../components/EntrySheet';
 import Hero from '../components/Hero';
-import { IconGear } from '../components/Icons';
-import Wordmark from '../components/Wordmark';
 
 export default function Home() {
   const [open, setOpen] = useState<Entry | null>(null);
@@ -50,19 +49,7 @@ export default function Home() {
 
   return (
     <main class={`screen screen--list home${capture.value.kind !== 'idle' ? ' capturing' : ''}`}>
-      <header class="topline">
-        <button type="button" class="wm-btn" aria-label={`Tally · ${t('common.settings')}`} onClick={() => navigate('/settings')}>
-          <Wordmark />
-        </button>
-        <span class="right">
-          <button type="button" aria-label={t('home.openOverview')} onClick={() => navigate('/overview')}>
-            {monthShortYear(today, language)}
-          </button>
-          <button type="button" class="ibtn ghost xs" aria-label={t('common.settings')} onClick={() => navigate('/settings')}>
-            <IconGear />
-          </button>
-        </span>
-      </header>
+      <AppTopline view="ledger" />
 
       <Hero totalCents={total} budgetCents={settings.value?.budget_cents ?? null} currency={currency.value} today={today} />
 
