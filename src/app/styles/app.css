@@ -337,14 +337,6 @@ button.link {
 }
 .wave-wrap {
   margin: 12px 0 10px;
-  transition: opacity 0.15s;
-}
-.wave-wrap.armed {
-  opacity: 0.3;
-}
-.hold-hint {
-  text-align: center;
-  margin: 14px 0 4px;
 }
 .btn.with-icon {
   display: flex;
@@ -979,10 +971,12 @@ button.link {
 }
 .ask {
   margin-top: 18px;
-  padding-bottom: calc(28px + var(--safe-b));
+  /* room for the docked box (.composer) */
+  padding-bottom: calc(var(--composer-h) + 24px + var(--safe-b));
 }
 .answer-block {
   margin: 10px 0 2px;
+  scroll-margin-bottom: calc(var(--composer-h) + 24px + var(--safe-b));
 }
 .answer-block .answer {
   margin: 10px 0 0;
@@ -991,14 +985,13 @@ button.link {
   margin: 16px 0 6px;
 }
 .ask-box {
-  margin-top: 16px;
   border-color: var(--line);
 }
 .ask-box:focus-within {
   border-color: var(--ink);
   box-shadow: none;
 }
-.ask-box input::placeholder {
+.cbox.ask-box input::placeholder {
   font-size: 13.5px;
 }
 .ask-nokey {

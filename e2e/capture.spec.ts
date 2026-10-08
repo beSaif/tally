@@ -1,6 +1,6 @@
 /**
  * The capture sheet (spec §3.4–3.5, design A.2 + C.2) in every state, against the real API:
- * voice (hold, tap, slide to cancel), text, batch, photo, edit mode, nothing parsed, errors, and the
+ * voice (hold, tap), text, batch, photo, edit mode, nothing parsed, errors, and the
  * entry sheet (§3.7). Screenshots of each state go to e2e/__screenshots__/capture-*.png.
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -23,12 +23,6 @@ async function home(page: Page): Promise<{ gemini: MockGemini }> {
   return { gemini };
 }
 
-const micBox = async (page: Page) => {
-  const box = await page.getByRole('button', { name: 'Record a voice note' }).boundingBox();
-  if (!box) throw new Error('mic not visible');
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-};
-
 test('voice: hold to talk, release to send, then confirm (A.2)', async ({ page }) => {
   const { gemini } = await home(page);
   const sheet = sheetOf(page);
@@ -37,14 +31,6 @@ test('voice: hold to talk, release to send, then confirm (A.2)', async ({ page }
   await expect(sheet.getByText(/Listening · 0:0[1-9]/)).toBeVisible();
   await expect(sheet.locator('.wave b')).toHaveCount(46);
   await shot(page, 'capture-01-recording-hold');
-
-  // Slide up past 80px: release would cancel. Come back down: it sends again.
-  const { x, y } = await micBox(page);
-  await page.mouse.move(x, y - 120, { steps: 5 });
-  await expect(sheet.getByText('Release to cancel')).toBeVisible();
-  await shot(page, 'capture-02-recording-cancel-armed');
-  await page.mouse.move(x, y, { steps: 5 });
-  await expect(sheet.getByText('Release to send')).toBeVisible();
 
   gemini.hold();
   await page.mouse.up();
@@ -75,8 +61,8 @@ test('voice: hold to talk, release to send, then confirm (A.2)', async ({ page }
   await expect(page.locator('.entries li.fresh')).toContainText('21.50');
 });
 
-test('voice: a quick tap keeps listening until Stop & send; sliding up cancels', async ({ page }) => {
-  const { gemini } = await home(page);
+test('voice: a quick tap keeps listening until Stop & send', async ({ page }) => {
+  await home(page);
   const sheet = sheetOf(page);
   await pressMic(page, { holdMs: 80 });
   await expect(sheet.getByText('Tap to stop')).toBeVisible();
@@ -86,12 +72,6 @@ test('voice: a quick tap keeps listening until Stop & send; sliding up cancels',
   await expect(sheet.getByText('Gemini parsed')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
-
-  // Hold, slide up, release: nothing is sent.
-  const before = gemini.generateCalls;
-  await pressMic(page, { holdMs: 700, dragUp: 120 });
-  await expect(sheet).toBeHidden();
-  expect(gemini.generateCalls).toBe(before);
 });
 
 test.describe('a press the microphone permission prompt takes away (iPhone)', () => {

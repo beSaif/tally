@@ -212,13 +212,13 @@ Default categories by language: EN `Groceries, Dining, Transport, Home, Health, 
 
 `.composer > .cbox`: text input (placeholder "Coffee 4.50 — or just talk", Enter sends, no newline) · camera `.ibtn.ghost` (opens a hidden `<input type=file accept="image/*" capture="environment">`; a chosen file → **Capture sheet** in photo mode) · right `.ibtn.dark` is **mic** when the input is empty and **send** (arrow up) when it has text.
 
-Mic behaviour: `pointerdown` starts recording immediately (asks for microphone permission the first time). If the pointer is released within 300ms → **tap mode**: keep recording, the sheet shows "TAP TO STOP"; tapping the sheet's stop button (or the mic again) sends. Otherwise → **hold mode**: the sheet shows "RELEASE TO SEND"; releasing sends. Dragging the pointer up by more than 80px before releasing cancels (the label flips to "RELEASE TO CANCEL"). Max 60s (auto-send). Recording uses `lib/audio.ts` (§7.3).
+Mic behaviour: `pointerdown` starts recording immediately (asks for microphone permission the first time). If the pointer is released within 300ms → **tap mode**: keep recording, the sheet shows "TAP TO STOP"; tapping the sheet's stop button (or the mic again) sends. Otherwise → **hold mode**: the sheet shows "RELEASE TO SEND"; releasing sends. Max 60s (auto-send). Recording uses `lib/audio.ts` (§7.3).
 
 Sending text: shows the Capture sheet in "thinking" state immediately, then the parsed result. The input clears on success and keeps the text on failure.
 
 ### 3.5 Capture sheet (design A.2; states: recording → thinking → result | error)
 
-`.dim` + `.sheet`. Header row: left `.lbl` in `--acc`: "● LISTENING · 0:06" (live timer) · right `.lbl`: "RELEASE TO SEND" / "TAP TO STOP" / "RELEASE TO CANCEL". Below: `.wave` with 46 bars animated from the microphone (`AnalyserNode`, 60fps, bar height 4–30px). For text/photo there is no header row; the sheet opens directly in thinking state (photo mode shows a 64px rounded thumbnail of the picture).
+`.dim` + `.sheet`. Header row: left `.lbl` in `--acc`: "● LISTENING · 0:06" (live timer) · right `.lbl`: "RELEASE TO SEND" / "TAP TO STOP". Below: `.wave` with 46 bars animated from the microphone (`AnalyserNode`, 60fps, bar height 4–30px). For text/photo there is no header row; the sheet opens directly in thinking state (photo mode shows a 64px rounded thumbnail of the picture).
 
 Thinking: label "● GEMINI IS LISTENING…" / "● GEMINI IS READING…" (orange dot pulsing), the wave frozen at low amplitude in `--faint`, a 3-line skeleton (`--paper` blocks) where the result will be. Cancelable with an × in the top-right (aborts the request).
 
@@ -523,7 +523,7 @@ Dedup: insert into `notification_log` **before** sending (`INSERT OR IGNORE`; if
 Recorded after the build so the spec stays honest. Each item is deliberate.
 
 - **Voice result header** (§3.5): after Gemini answers, the sheet keeps the A.2 header and wave but reads "VOICE NOTE · 0:06" with a × and a grey wave, because orange marks only a live recording. Text results carry a "You wrote" label and photo results a "Receipt photo" label (C.2 style).
-- **Tap mode** (§3.4): the sheet covers the composer (as in A.2), so "tap the mic again" is not reachable; a "■ Stop & send" button in the sheet does it. A "↑ Slide up to cancel" hint shows in hold mode.
+- **Tap mode** (§3.4): the sheet covers the composer (as in A.2), so "tap the mic again" is not reachable; a "■ Stop & send" button in the sheet does it.
 - **The mic press and the permission prompt** (§3.4): the prompt takes the press with it (on iPhone no release reaches the page), so a press that is going to prompt (the Permissions API answers anything but `granted`, `lib/mic.ts`) goes to tap mode at once, with Cancel / Stop & send on the sheet; without an answer (older Safari, Firefox), a microphone that starts more than 1 s after the press, still undecided, is treated the same. A `pointercancel` keeps listening in tap mode instead of discarding the note. The mic button keeps `touch-action: none` so a finger drift during a hold is not a scroll. iOS asks a Home Screen web app at every launch, and again a while after the microphone was released; Tally does not hold the microphone between notes to get around that.
 - **Deltas** (§3.6): a 0% delta is shown whenever the previous period had a total for that category.
 - **Inputs** are 16px where the design draws 14px, so iOS does not zoom on focus; with the viewport locked (§9 / native feel) this is belt and braces.

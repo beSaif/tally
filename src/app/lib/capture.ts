@@ -66,7 +66,7 @@ export interface ResultState {
 
 export type CaptureState =
   | { kind: 'idle' }
-  | { kind: 'recording'; gesture: Gesture; cancelArmed: boolean; starting: boolean }
+  | { kind: 'recording'; gesture: Gesture; starting: boolean }
   | { kind: 'thinking'; input: CaptureInput }
   | ResultState
   | { kind: 'empty'; input: CaptureInput; transcript: string; reply: string | null }
@@ -121,7 +121,7 @@ export async function startRecording(gesture: Gesture = 'pending'): Promise<void
   history = [];
   levels.value = new Array<number>(BAR_COUNT).fill(0);
   elapsedMs.value = 0;
-  capture.value = { kind: 'recording', gesture, cancelArmed: false, starting: true };
+  capture.value = { kind: 'recording', gesture, starting: true };
   const pressedAt = performance.now();
   let permission: MicPermission = 'unknown';
   if (gesture === 'pending') {
@@ -164,7 +164,7 @@ export async function startRecording(gesture: Gesture = 'pending'): Promise<void
 /**
  * The press that started the recording ended after `heldMs` (pointerup). A quick press, a release
  * while the microphone was still starting (a permission prompt was up), or tap mode already: keep
- * listening until tapped again. A hold sends, or cancels when the finger had slid up.
+ * listening until tapped again. A hold sends.
  */
 export function releaseRecording(heldMs: number): void {
   const s = capture.value;
@@ -174,7 +174,7 @@ export function releaseRecording(heldMs: number): void {
     return;
   }
   capture.value = { ...s, gesture: 'hold' };
-  void finishRecording(!s.cancelArmed);
+  void finishRecording(true);
 }
 
 /**
@@ -184,13 +184,7 @@ export function releaseRecording(heldMs: number): void {
 export function keepListening(): void {
   const s = capture.value;
   if (s.kind !== 'recording' || s.gesture === 'tap') return;
-  capture.value = { ...s, gesture: 'tap', cancelArmed: false };
-}
-
-/** Sliding up arms "release to cancel"; meaningless in tap mode, where nothing is held. */
-export function setCancelArmed(armed: boolean): void {
-  const s = capture.value;
-  if (s.kind === 'recording' && s.gesture !== 'tap' && s.cancelArmed !== armed) capture.value = { ...s, cancelArmed: armed };
+  capture.value = { ...s, gesture: 'tap' };
 }
 
 export async function finishRecording(send: boolean): Promise<void> {

@@ -1,7 +1,8 @@
 /**
  * "Ask your data" (design C.3, spec §3.6): a question about the visible period goes to Gemini with
- * that period's entries; the latest answer renders above the box with amounts in mono and the
- * first category mentioned in the accent colour. ERROR_KEYS also serves the report's summary.
+ * that period's entries; the latest answer renders at the end of the page with amounts in mono and
+ * the first category mentioned in the accent colour. The box itself is docked at the bottom, like
+ * the ledger's composer. ERROR_KEYS also serves the report's summary.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Summary } from '@shared/api';
@@ -36,8 +37,14 @@ export default function AskBox({ periodLabel, range, summary }: { periodLabel: s
   const [question, setQuestion] = useState('');
   const [state, setState] = useState<AskState>({ kind: 'idle' });
   const inflight = useRef<AbortController | null>(null);
+  const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => () => inflight.current?.abort(), []);
+
+  // The answer lands at the end of the page, behind the docked box: bring it into view.
+  useEffect(() => {
+    if (state.kind !== 'idle') answerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [state.kind]);
 
   const apiKey = geminiKey.value;
   if (!apiKey) {
@@ -106,7 +113,7 @@ export default function AskBox({ periodLabel, range, summary }: { periodLabel: s
   return (
     <div class="ask">
       {state.kind !== 'idle' ? (
-        <div class="answer-block" aria-live="polite">
+        <div class="answer-block" aria-live="polite" ref={answerRef}>
           <div class="lbl">{state.question}</div>
           {state.kind === 'thinking' ? (
             <div class="thinking-dots" role="status" aria-label={t('overview.askThinking')}>
@@ -125,26 +132,28 @@ export default function AskBox({ periodLabel, range, summary }: { periodLabel: s
           {state.kind === 'error' ? <p class="err line">{t(ERROR_KEYS[state.code], { model: model.value })}</p> : null}
         </div>
       ) : null}
-      <form
-        class="cbox ask-box"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void ask();
-        }}
-      >
-        <input
-          type="text"
-          value={question}
-          placeholder={t('overview.askPlaceholder')}
-          aria-label={t('overview.askLabel')}
-          autocomplete="off"
-          enterkeyhint="send"
-          onInput={(e) => setQuestion(e.currentTarget.value)}
-        />
-        <button type="submit" class="ibtn dark" aria-label={t('overview.ask')} disabled={!question.trim() || state.kind === 'thinking'}>
-          <IconSend />
-        </button>
-      </form>
+      <div class="composer">
+        <form
+          class="cbox ask-box"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void ask();
+          }}
+        >
+          <input
+            type="text"
+            value={question}
+            placeholder={t('overview.askPlaceholder')}
+            aria-label={t('overview.askLabel')}
+            autocomplete="off"
+            enterkeyhint="send"
+            onInput={(e) => setQuestion(e.currentTarget.value)}
+          />
+          <button type="submit" class="ibtn dark" aria-label={t('overview.ask')} disabled={!question.trim() || state.kind === 'thinking'}>
+            <IconSend />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

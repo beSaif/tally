@@ -58,7 +58,7 @@ function CloseButton() {
 
 function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording' }> }) {
   const tap = state.gesture === 'tap';
-  const hint = state.cancelArmed ? t('capture.releaseToCancel') : tap ? t('capture.tapToStop') : t('capture.releaseToSend');
+  const hint = tap ? t('capture.tapToStop') : t('capture.releaseToSend');
   return (
     <>
       <div class="sheet-head">
@@ -66,11 +66,11 @@ function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording'
           <span class="dot" />
           {t('capture.listening', { time: formatDuration(elapsedMs.value) })}
         </span>
-        <span class={`lbl${state.cancelArmed ? ' ink' : ''}`} aria-live="polite">
+        <span class="lbl" aria-live="polite">
           {hint}
         </span>
       </div>
-      <div class={`wave-wrap${state.cancelArmed ? ' armed' : ''}`}>
+      <div class="wave-wrap">
         <Wave values={levels.value} tone="live" />
       </div>
       {tap ? (
@@ -83,12 +83,7 @@ function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording'
             {t('capture.stopSend')}
           </button>
         </div>
-      ) : (
-        // Armed, the header already says "Release to cancel"; the empty line keeps the sheet from jumping.
-        <p class="lbl hold-hint" aria-hidden="true">
-          {state.cancelArmed ? '\u00a0' : t('capture.slideToCancel')}
-        </p>
-      )}
+      ) : null}
     </>
   );
 }
