@@ -28,6 +28,7 @@ import { frozenWave, noteWave } from '../lib/bars';
 import { formatDuration, todayLocal } from '../lib/format';
 import { categories, currency, model } from '../lib/store';
 import { navigate } from '../router';
+import { cadenceName, ModeSwitch, RepeatMark } from './BillBits';
 import { CompactFields, EntryFields, EntryReadout } from './EntryFields';
 import { IconClose, IconOk, IconStop } from './Icons';
 import Sheet from './Sheet';
@@ -174,6 +175,7 @@ function Single({ state }: { state: ResultState }) {
         </span>
       </div>
       {editing ? <EntryFields draft={draft} onChange={(p) => updateDraft(draft.key, p)} /> : <EntryReadout draft={draft} today={todayLocal()} />}
+      {draft.repeat ? <ModeSwitch value={draft.mode} onChange={(mode) => updateDraft(draft.key, { mode })} /> : null}
       {state.error ? (
         <p class="err line" role="alert">
           {t(state.error)}
@@ -190,7 +192,7 @@ function Single({ state }: { state: ResultState }) {
           </button>
         )}
         <button type="button" class="btn primary" onClick={() => void saveCapture()} disabled={state.saving}>
-          {state.saving ? '…' : t('common.save')}
+          {state.saving ? '…' : draft.repeat ? t('bills.saveBill') : t('common.save')}
         </button>
       </div>
     </>
@@ -278,6 +280,12 @@ function BatchRow({ draft, editing }: { draft: Draft; editing: boolean }) {
         <span>
           <span class="n">{draft.description}</span>
           <span class="c">
+            {draft.repeat ? (
+              <>
+                <RepeatMark />
+                {cadenceName(draft.repeat)} ·{' '}
+              </>
+            ) : null}
             {category}
             {draft.currency !== currency.value ? ` · ${draft.currency}` : ''}
             {draft.note ? ` · ${draft.note}` : ''}

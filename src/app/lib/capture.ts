@@ -3,7 +3,7 @@
  * Shared by the composer (which starts it) and the capture sheet (which renders it).
  */
 import { signal } from '@preact/signals';
-import type { EntrySource, NewEntry } from '@shared/api';
+import type { BillMode, Cadence, EntrySource, NewEntry } from '@shared/api';
 import { isValidMinute } from '@shared/dates';
 import { parseAmount } from '@shared/money';
 import { GeminiError, parseExpenses, type GeminiErrorCode, type ParseInput, type ParsedEntry } from './gemini';
@@ -11,10 +11,12 @@ import { Recorder } from './audio';
 import { micPermission, type MicPermission } from './mic';
 import { api } from './api';
 import { BAR_COUNT, LevelMeter, loudness, voiceprint } from './bars';
-import { amountInputValue } from './format';
+import { createBill, nextLabel } from './bills';
+import { amountInputValue, todayLocal } from './format';
 import { addEntries } from './ledger';
+import { showToast } from './toast';
 import { categoryIdFor, categoryNames, currency, geminiKey, model } from './store';
-import { lang, type TKey } from '../i18n';
+import { lang, t, type TKey } from '../i18n';
 
 export const MAX_RECORDING_MS = 60_000;
 /** Shorter than this is almost always an accidental tap: nothing useful to send. */
@@ -46,6 +48,10 @@ export interface Draft {
   note: string;
   currency: string;
   checked: boolean;
+  /** A bill that comes back on this beat; null for a one-off expense. */
+  repeat: Cadence | null;
+  /** For a bill: logged by itself when due, or asked about first. */
+  mode: BillMode;
 }
 
 export type Gesture = 'pending' | 'tap' | 'hold';
@@ -81,6 +87,8 @@ export const composerText = signal('');
 /** Incremented to ask the composer to focus its input / open the camera. */
 export const composerFocusRequest = signal(0);
 export const photoPickRequest = signal(0);
+/** The day picked in the bills calendar: what is said next is a bill due that day. */
+export const billDay = signal<string | null>(null);
 
 let recorder: Recorder | null = null;
 let recordStart = 0;
@@ -248,6 +256,8 @@ function toDraft(p: ParsedEntry): Draft {
     note: p.note ?? '',
     currency: p.currency,
     checked: true,
+    repeat: p.repeat,
+    mode: 'auto',
   };
 }
 
@@ -272,6 +282,7 @@ async function run(input: CaptureInput): Promise<void> {
         currency: currency.value,
         language: lang.value,
         categories: categoryNames.value,
+        ...(billDay.value ? { billDay: billDay.value } : {}),
       },
       { signal: ctrl.signal },
     );
@@ -369,31 +380,69 @@ export async function saveCapture(): Promise<boolean> {
   capture.value = { ...s, saving: true, error: null };
   const source: EntrySource = s.input.mode;
   const raw = s.input.mode === 'text' ? s.input.text : s.input.mode === 'voice' ? s.transcript : 'photo';
-  const entries: NewEntry[] = chosen.map((d) => ({
-    amount_cents: parseAmount(d.amount) ?? 0,
-    currency: d.currency,
-    description: d.description.trim(),
-    // An explicit id (null = Other) and never a name as well: the API lets the id win anyway.
-    category_id: d.categoryId,
-    occurred_at: d.occurredAt,
-    note: d.note.trim() || null,
-    source,
-    raw_input: raw ? raw.slice(0, 4000) : null,
-  }));
+  const rawInput = raw ? raw.slice(0, 4000) : null;
+  const today = todayLocal();
+  const plain = chosen.filter((d) => !d.repeat);
+  const recurring = chosen.filter((d) => d.repeat);
+  // Saved drafts leave the sheet as they go, so a failure part-way never saves anything twice.
+  const saved = new Set<string>();
+  const done: Array<{ name: string; next: string; paid: boolean }> = [];
   try {
-    const res = await api.createEntries(entries);
-    addEntries(res.entries, { fresh: true });
-    restoreText = null;
-    releaseInput(s.input);
-    capture.value = { kind: 'idle' };
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
-    return true;
+    if (plain.length > 0) {
+      const entries: NewEntry[] = plain.map((d) => ({
+        amount_cents: parseAmount(d.amount) ?? 0,
+        currency: d.currency,
+        description: d.description.trim(),
+        // An explicit id (null = Other) and never a name as well: the API lets the id win anyway.
+        category_id: d.categoryId,
+        occurred_at: d.occurredAt,
+        note: d.note.trim() || null,
+        source,
+        raw_input: rawInput,
+      }));
+      const res = await api.createEntries(entries);
+      addEntries(res.entries, { fresh: true });
+      for (const d of plain) saved.add(d.key);
+    }
+    for (const d of recurring) {
+      const day = d.occurredAt.slice(0, 10);
+      const paid = day <= today;
+      const { bill } = await createBill({
+        amount_cents: parseAmount(d.amount) ?? 0,
+        currency: d.currency,
+        description: d.description.trim(),
+        category_id: d.categoryId,
+        cadence: d.repeat as Cadence,
+        first_due: day,
+        mode: d.mode,
+        // Its day has come: this one is paid, and the bill starts at the next.
+        paid_at: paid ? d.occurredAt : null,
+        source,
+        raw_input: rawInput,
+      });
+      saved.add(d.key);
+      done.push({ name: bill.description, next: bill.next_due, paid });
+    }
   } catch {
     const now = capture.value;
-    if (now.kind === 'result') capture.value = { ...now, saving: false, error: 'capture.saveFailed' };
+    if (now.kind === 'result') {
+      const left = now.drafts.filter((d) => !saved.has(d.key));
+      capture.value = { ...now, drafts: left, editing: now.editing.filter((k) => !saved.has(k)), saving: false, error: 'capture.saveFailed' };
+    }
     return false;
   }
+  restoreText = null;
+  releaseInput(s.input);
+  capture.value = { kind: 'idle' };
+  const first = done[0];
+  if (done.length === 1 && first) {
+    showToast({ text: t(first.paid ? 'bills.savedPaid' : 'bills.saved', { name: first.name, date: nextLabel(first.next) }) });
+  } else if (done.length > 1) {
+    showToast({ text: t('bills.savedMany', { count: done.length }) });
+  }
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+  return true;
 }
 
 // ---------------------------------------------------------------- closing, retrying

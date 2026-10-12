@@ -31,6 +31,7 @@ describe('gate', () => {
     expect(gate({ path: '/overview', ...ready })).toEqual({ screen: 'overview' });
     expect(gate({ path: '/report', ...ready })).toEqual({ screen: 'report' });
     expect(gate({ path: '/settings', ...ready })).toEqual({ screen: 'settings' });
+    expect(gate({ path: '/bills', ...ready })).toEqual({ screen: 'bills' });
     expect(gate({ path: '/login', ...ready })).toEqual({ screen: 'home', redirect: '/' });
     expect(gate({ path: '/setup', ...ready })).toEqual({ screen: 'home', redirect: '/' });
     expect(gate({ path: '/nope', ...ready })).toEqual({ screen: 'home', redirect: '/' });

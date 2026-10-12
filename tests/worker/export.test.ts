@@ -61,7 +61,7 @@ describe('CSV helpers', () => {
     expect(csvText('\tx')).toBe("'\tx");
     expect(csvText('Coffee')).toBe('Coffee');
     const csv = entriesCsv([
-      { id: 'i', amount_cents: 100, currency: 'CHF', description: '=cmd', category_id: null, category_name: null, occurred_at: '2026-10-05T12:00', note: '@n', source: 'manual', created_at: 0, updated_at: 0 },
+      { id: 'i', amount_cents: 100, currency: 'CHF', description: '=cmd', category_id: null, category_name: null, occurred_at: '2026-10-05T12:00', note: '@n', source: 'manual', bill_id: null, created_at: 0, updated_at: 0 },
     ]);
     expect(csv).toContain("'=cmd");
     expect(csv).toContain("'@n");

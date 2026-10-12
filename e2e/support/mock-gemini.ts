@@ -15,6 +15,8 @@ export interface RawEntry {
   occurred_at: string;
   note: string | null;
   confidence: number;
+  /** 'none' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' (the app treats a missing one as 'none'). */
+  repeat?: string;
 }
 export interface RawParse {
   transcript: string;
@@ -75,6 +77,33 @@ export const fixtures = {
             : 'Other';
     return { transcript: text, entries: [{ amount, currency: 'CHF', description, category, occurred_at: now, note: null, confidence: 0.8 }], reply: null };
   },
+  /**
+   * "Netflix 18.90 every month on the 15th": a bill. Due on the named day of this month (or next,
+   * once it has passed), on the day picked in the bills calendar, else now.
+   */
+  bill: (now: string, text: string, pickedDay: string | null): RawParse => {
+    const lower = text.toLowerCase();
+    const amount = Number((/(\d+(?:[.,]\d{1,2})?)(?!\s*(?:st|nd|rd|th)\b)/.exec(text.replace(/\b\d{1,2}(st|nd|rd|th)\b/gi, ''))?.[1] ?? '0').replace(',', '.'));
+    const repeat = /week/.test(lower) ? 'weekly' : /year/.test(lower) ? 'yearly' : /once/.test(lower) ? 'none' : 'monthly';
+    const words = text
+      .replace(/\b\d{1,2}(st|nd|rd|th)\b/gi, ' ')
+      .replace(/[\d.,]+/g, ' ')
+      .replace(/\b(every|each|month|monthly|week|weekly|year|yearly|on|the|chf|just|once)\b/gi, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+    const description = words ? words.replace(/\b\w/g, (c) => c.toUpperCase()) : 'Bill';
+    const nth = /\bon the (\d{1,2})(?:st|nd|rd|th)?\b/i.exec(text)?.[1];
+    let day = now.slice(0, 10);
+    if (pickedDay) day = pickedDay;
+    else if (nth) {
+      const [y, m, d] = now.slice(0, 10).split('-').map(Number) as [number, number, number];
+      const target = Number(nth);
+      const next = target >= d ? new Date(Date.UTC(y, m - 1, target)) : new Date(Date.UTC(y, m, target));
+      day = next.toISOString().slice(0, 10);
+    }
+    const category = /netflix|spotify|piano|cinema/.test(lower) ? 'Fun' : /internet|phone|mobile|swisscom|salt|sig/.test(lower) ? 'Bills' : /rent/.test(lower) ? 'Home' : 'Other';
+    return { transcript: text, entries: [{ amount, currency: 'CHF', description, category, occurred_at: `${day}T${now.slice(11)}`, note: null, confidence: 0.9, repeat }], reply: null };
+  },
 };
 
 interface GeminiPart {
@@ -125,6 +154,9 @@ export function chooseParse(req: GeminiRequest): RawParse {
   if (media.startsWith('image/')) return fixtures.receipt(now);
   const text = parts.map((p) => p.text ?? '').join(' ').trim();
   const lower = text.toLowerCase();
+  const system = (req.systemInstruction?.parts ?? []).map((p) => p.text ?? '').join('\n');
+  const picked = /picked \w+ (\d{4}-\d{2}-\d{2}) in their bills calendar/.exec(system)?.[1] ?? null;
+  if (/\d/.test(text) && (picked || /\bevery\b|monthly|weekly|yearly/.test(lower))) return fixtures.bill(now, text, picked);
   if (lower.includes('coop') || (lower.includes('groceries') && lower.includes('coffee'))) return fixtures.batch(now);
   if (lower.includes('dinner') && lower.includes('pâquis')) return fixtures.single(now, text);
   if (!/\d/.test(text)) return fixtures.empty(text);

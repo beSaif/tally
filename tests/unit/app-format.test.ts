@@ -31,6 +31,7 @@ const entry = (id: string, occurred_at: string, amount_cents: number, created_at
   occurred_at,
   note: null,
   source: 'text',
+  bill_id: null,
   created_at,
   updated_at: created_at,
 });

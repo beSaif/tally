@@ -3,10 +3,12 @@
  * and the compact edit row used inside the batch list (C.2).
  */
 import { useId } from 'preact/hooks';
+import type { BillMode, Cadence } from '@shared/api';
 import { formatAmount, parseAmount } from '@shared/money';
 import { lang, t } from '../i18n';
-import { whenLabel } from '../lib/format';
+import { cadenceLabel, dayOf, todayLocal, weekdayDayMonth, whenLabel } from '../lib/format';
 import { categories } from '../lib/store';
+import { CadenceChips, RepeatMark } from './BillBits';
 
 export interface EntryDraft {
   amount: string;
@@ -15,6 +17,9 @@ export interface EntryDraft {
   occurredAt: string;
   note: string;
   currency: string;
+  /** Capture drafts only: the beat of a bill (null: a one-off expense). */
+  repeat?: Cadence | null;
+  mode?: BillMode;
 }
 
 export type DraftPatch = Partial<EntryDraft>;
@@ -35,8 +40,22 @@ export function EntryReadout({ draft, today }: { draft: EntryDraft; today: strin
       <div>{draft.description}</div>
       <div>{t('capture.category')}</div>
       <div>{categoryName(draft.categoryId)}</div>
-      <div>{t('capture.when')}</div>
-      <div class="mono when">{whenLabel(draft.occurredAt, today, lang.value)}</div>
+      {draft.repeat ? (
+        <>
+          <div class="kv-hl">{t('bills.repeats')}</div>
+          <div class="kv-hl repeat-val">
+            <RepeatMark />
+            {cadenceLabel(draft.repeat, dayOf(draft.occurredAt), lang.value)}
+          </div>
+          <div>{dayOf(draft.occurredAt) > today ? t('bills.firstDue') : t('bills.paid')}</div>
+          <div class="mono when">{dayOf(draft.occurredAt) > today ? weekdayDayMonth(dayOf(draft.occurredAt), lang.value) : whenLabel(draft.occurredAt, today, lang.value)}</div>
+        </>
+      ) : (
+        <>
+          <div>{t('capture.when')}</div>
+          <div class="mono when">{whenLabel(draft.occurredAt, today, lang.value)}</div>
+        </>
+      )}
       {draft.note ? (
         <>
           <div>{t('capture.note')}</div>
@@ -85,7 +104,15 @@ export function EntryFields({ draft, onChange, autoFocus }: { draft: EntryDraft;
           </button>
         </div>
       </div>
-      <label for={`${id}-t`}>{t('capture.when')}</label>
+      {draft.repeat !== undefined ? (
+        <>
+          <div id={`${id}-r`}>{t('bills.repeats')}</div>
+          <div>
+            <CadenceChips value={draft.repeat} once labelledBy={`${id}-r`} onChange={(repeat) => onChange({ repeat })} />
+          </div>
+        </>
+      ) : null}
+      <label for={`${id}-t`}>{draft.repeat ? (dayOf(draft.occurredAt) > todayLocal() ? t('bills.firstDue') : t('bills.paid')) : t('capture.when')}</label>
       <div>
         <input id={`${id}-t`} class="mono" type="datetime-local" value={draft.occurredAt} onInput={(e) => onChange({ occurredAt: e.currentTarget.value.slice(0, 16) })} />
       </div>

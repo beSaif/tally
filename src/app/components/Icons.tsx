@@ -103,6 +103,40 @@ export function IconChevronDown() {
   );
 }
 
+export function IconChevronRight() {
+  return (
+    <Line>
+      <path d="M9.5 6.5 15 12l-5.5 5.5" />
+    </Line>
+  );
+}
+
+export function IconChevronLeft() {
+  return (
+    <Line>
+      <path d="M14.5 6.5 9 12l5.5 5.5" />
+    </Line>
+  );
+}
+
+/** A bill that comes back: two arrows chasing each other. */
+export function IconRepeat() {
+  return (
+    <Line>
+      <path d="M16.5 3.5 19.5 6.5l-3 3M4.5 11V9.5a3 3 0 0 1 3-3h12M7.5 20.5l-3-3 3-3M19.5 13v1.5a3 3 0 0 1-3 3h-12" />
+    </Line>
+  );
+}
+
+export function IconCalendar() {
+  return (
+    <Line width={1.6}>
+      <rect x="4" y="5.5" width="16" height="15" rx="2" />
+      <path d="M8 3.5v4M16 3.5v4M4 10h16" />
+    </Line>
+  );
+}
+
 export function IconStop() {
   return (
     <Line>

@@ -8,6 +8,7 @@ import { onAppVisible } from './lib/visible';
 import { navigate, route } from './router';
 import ToastHost from './components/ToastHost';
 import AuthScreen from './screens/Auth';
+import Bills from './screens/Bills';
 import Home from './screens/Home';
 import Overview from './screens/Overview';
 import Privacy from './screens/Privacy';
@@ -50,7 +51,9 @@ function Routed() {
   return (
     <>
       <ScreenView screen={result.screen} />
-      <ToastHost withComposer={result.screen === 'home' || (result.screen === 'overview' && Boolean(geminiKey.value))} />
+      <ToastHost
+        withComposer={result.screen === 'home' || (result.screen === 'bills' && !r.query.get('id')) || (result.screen === 'overview' && Boolean(geminiKey.value))}
+      />
     </>
   );
 }
@@ -69,6 +72,8 @@ function ScreenView({ screen }: { screen: Screen }) {
       return <Report />;
     case 'settings':
       return <Settings />;
+    case 'bills':
+      return <Bills />;
     default:
       return <Home />;
   }

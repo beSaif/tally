@@ -52,6 +52,37 @@ export const newEntrySchema = z.object({
 export const entriesCreateSchema = z.object({ entries: z.array(newEntrySchema).min(1).max(50) });
 export const entryPatchSchema = newEntrySchema.partial();
 
+export const cadenceSchema = z.enum(['weekly', 'monthly', 'quarterly', 'yearly']);
+export const billModeSchema = z.enum(['auto', 'ask']);
+const amountCentsSchema = z.number().int().min(0).max(1_000_000_000);
+const descriptionSchema = z.string().trim().min(1).max(200);
+
+export const newBillSchema = z.object({
+  amount_cents: amountCentsSchema,
+  currency: currencySchema.optional(),
+  description: descriptionSchema,
+  category_id: z.string().uuid().nullable().optional(),
+  cadence: cadenceSchema,
+  first_due: daySchema,
+  mode: billModeSchema,
+  paid_at: minuteSchema.nullable().optional(),
+  source: entrySourceSchema.optional(),
+  raw_input: z.string().max(4000).nullable().optional(),
+});
+export const billPatchSchema = z
+  .object({
+    amount_cents: amountCentsSchema.optional(),
+    description: descriptionSchema.optional(),
+    category_id: z.string().uuid().nullable().optional(),
+    cadence: cadenceSchema.optional(),
+    next_due: daySchema.optional(),
+    mode: billModeSchema.optional(),
+  })
+  .refine((p) => Object.values(p).some((v) => v !== undefined), 'nothing to change');
+export const billDueSchema = z.object({ due: daySchema, occurred_at: minuteSchema.optional() });
+export const todaySchema = z.object({ today: daySchema });
+export const dismissSchema = z.object({ key: z.string().min(1).max(260) });
+
 export const rangeQuerySchema = z.object({ from: daySchema, to: daySchema });
 export const summaryQuerySchema = z.object({
   from: daySchema,
@@ -88,6 +119,7 @@ export const geminiParseSchema = z.object({
         occurred_at: z.string().default(''),
         note: z.string().nullable().default(null),
         confidence: z.coerce.number().min(0).max(1).default(0.5),
+        repeat: z.string().nullable().default(null),
       }),
     )
     .default([]),

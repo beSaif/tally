@@ -8,8 +8,10 @@
  * - Every failure surfaces as a GeminiError: the UI localises `code`; `message` is a short English
  *   explanation (the API's own wording when it gave one).
  */
+import type { Cadence } from '@shared/api';
+import { CADENCES } from '@shared/bills';
 import { DEFAULT_MODEL } from '@shared/constants';
-import { isValidMinute, toLocalMinute } from '@shared/dates';
+import { isValidMinute, toLocalMinute, weekdayOf } from '@shared/dates';
 import { formatAmount } from '@shared/money';
 import { geminiParseSchema, type GeminiParseRaw } from '@shared/schemas';
 import { blobToWav16k } from './audio';
@@ -17,7 +19,15 @@ import { downscaleToJpeg, isDownscaledJpeg } from './image';
 
 export type GeminiConfig = { apiKey: string; model: string };
 export type Lang = 'en' | 'fr';
-export type ParseContext = { now: Date; timeZone: string; currency: string; language: Lang; categories: string[] };
+export type ParseContext = {
+  now: Date;
+  timeZone: string;
+  currency: string;
+  language: Lang;
+  categories: string[];
+  /** A day the person picked in the bills calendar ('YYYY-MM-DD'): what they say is a bill due then. */
+  billDay?: string;
+};
 export type ParsedEntry = {
   amount_cents: number;
   currency: string;
@@ -26,6 +36,8 @@ export type ParsedEntry = {
   occurred_at: string;
   note: string | null;
   confidence: number;
+  /** A bill that comes back on this beat; null for a one-off expense. */
+  repeat: Cadence | null;
 };
 export type ParseResult = { transcript: string; entries: ParsedEntry[]; reply: string | null };
 export type ParseInput = { kind: 'text'; text: string } | { kind: 'audio'; blob: Blob } | { kind: 'image'; blob: Blob };
@@ -86,9 +98,10 @@ export const PARSE_RESPONSE_SCHEMA = {
           occurred_at: { type: 'string' },
           note: { type: 'string', nullable: true },
           confidence: { type: 'number' },
+          repeat: { type: 'string', enum: ['none', 'weekly', 'monthly', 'quarterly', 'yearly'] },
         },
         required: ['amount', 'currency', 'description', 'category', 'occurred_at', 'confidence'],
-        propertyOrdering: ['amount', 'currency', 'description', 'category', 'occurred_at', 'note', 'confidence'],
+        propertyOrdering: ['amount', 'currency', 'description', 'category', 'occurred_at', 'note', 'confidence', 'repeat'],
       },
     },
     reply: { type: 'string', nullable: true },
@@ -385,8 +398,15 @@ export function buildParseSystemInstruction(ctx: ParseContext): string {
     '- category: the best match from the list; otherwise "Other".',
     '- note: only useful extras (split, who with, half fare, items on a receipt); else null.',
     '- confidence: 0..1 for the whole entry.',
+    '- repeat: "weekly", "monthly", "quarterly" or "yearly" when the person says it comes back on that beat ("every month", "each year", "every 3 months", rent, a subscription they name as monthly); otherwise "none".',
+    '- For a repeating bill, occurred_at is the day it is due next: "Netflix 18.90 every month on the 15th" said before the 15th is due on the 15th of this month, after it on the 15th of next month. Without a day, now.',
     '- transcript: the verbatim words for audio; the input text for text; "" for images.',
     "- If nothing is an expense, return entries: [] and a one-sentence reply in the person's language saying what was missing.",
+    ...(ctx.billDay
+      ? [
+          `The person picked ${WEEKDAYS[weekdayOf(ctx.billDay)] ?? ''} ${ctx.billDay} in their bills calendar: what they say is a bill due that day. Use that day for occurred_at, and repeat "monthly" unless they name another beat, or "none" if they say it is just once.`,
+        ]
+      : []),
   ].join('\n');
 }
 
@@ -486,7 +506,7 @@ function relaxModelJson(json: unknown): unknown {
     out.entries = out.entries.map((entry: unknown) => {
       if (!isRecord(entry)) return entry;
       const relaxed: Record<string, unknown> = { ...entry };
-      for (const field of ['currency', 'description', 'occurred_at']) if (relaxed[field] === null) delete relaxed[field];
+      for (const field of ['currency', 'description', 'occurred_at', 'repeat']) if (relaxed[field] === null) delete relaxed[field];
       const confidence = toConfidence(relaxed.confidence);
       if (confidence === undefined) delete relaxed.confidence;
       else relaxed.confidence = confidence;
@@ -534,15 +554,23 @@ export function normalizeOccurredAt(value: string, now: Date): string {
 
 type RawEntry = GeminiParseRaw['entries'][number];
 
+function normalizeCadence(value: string | null): Cadence | null {
+  const v = (value ?? '').trim().toLowerCase();
+  return (CADENCES as readonly string[]).includes(v) ? (v as Cadence) : null;
+}
+
 function normalizeEntry(entry: RawEntry, ctx: ParseContext): ParsedEntry {
+  const occurredAt = normalizeOccurredAt(entry.occurred_at, ctx.now);
   return {
     amount_cents: Math.round(entry.amount * 100),
     currency: normalizeCurrency(entry.currency, ctx.currency),
     description: clip(oneLine(entry.description), MAX_DESCRIPTION_LENGTH) || (ctx.language === 'fr' ? 'Dépense' : 'Expense'),
     category: matchCategory(entry.category, ctx.categories),
-    occurred_at: normalizeOccurredAt(entry.occurred_at, ctx.now),
+    // A day picked in the calendar is the day, whatever the model made of it.
+    occurred_at: ctx.billDay ? `${ctx.billDay}T${occurredAt.slice(11)}` : occurredAt,
     note: emptyToNull(clip(oneLine(entry.note ?? ''), MAX_NOTE_LENGTH)),
     confidence: Number.isFinite(entry.confidence) ? Math.min(1, Math.max(0, entry.confidence)) : 0.5,
+    repeat: normalizeCadence(entry.repeat),
   };
 }
 

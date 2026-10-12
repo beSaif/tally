@@ -12,6 +12,7 @@ const entry = (id: string, amount_cents: number, occurred_at: string): Entry => 
   occurred_at,
   note: null,
   source: 'text',
+  bill_id: null,
   created_at: 0,
   updated_at: 0,
 });

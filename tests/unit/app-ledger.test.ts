@@ -13,7 +13,7 @@ let seq: number;
 
 function entry(occurred_at: string, amount_cents = 100): Entry {
   seq++;
-  return { id: `e${seq}`, amount_cents, currency: 'CHF', description: `entry ${seq}`, category_id: null, category_name: null, occurred_at, note: null, source: 'text', created_at: seq, updated_at: seq };
+  return { id: `e${seq}`, amount_cents, currency: 'CHF', description: `entry ${seq}`, category_id: null, category_name: null, occurred_at, note: null, source: 'text', bill_id: null, created_at: seq, updated_at: seq };
 }
 
 function block(key: string, from: string, to: string, entries: Entry[] = []): MonthBlock {

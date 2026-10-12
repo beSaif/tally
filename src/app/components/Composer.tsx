@@ -19,7 +19,8 @@ import {
 } from '../lib/capture';
 import { IconCam, IconMic, IconSend } from './Icons';
 
-export default function Composer() {
+/** `placeholder` overrides the usual hint (the bills calendar names the picked day). */
+export default function Composer({ placeholder }: { placeholder?: string } = {}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const press = useRef<{ id: number; at: number } | null>(null);
@@ -96,7 +97,7 @@ export default function Composer() {
           type="text"
           name="expense"
           value={text}
-          placeholder={t('composer.placeholder')}
+          placeholder={placeholder ?? t('composer.placeholder')}
           aria-label={t('composer.label')}
           autocomplete="off"
           autocapitalize="sentences"

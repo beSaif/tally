@@ -34,9 +34,10 @@ const SPEC_RESPONSE_SCHEMA: unknown = JSON.parse(`{"type":"object","properties":
   "entries":{"type":"array","items":{"type":"object","properties":{
     "amount":{"type":"number"},"currency":{"type":"string"},"description":{"type":"string"},
     "category":{"type":"string"},"occurred_at":{"type":"string"},
-    "note":{"type":"string","nullable":true},"confidence":{"type":"number"}},
+    "note":{"type":"string","nullable":true},"confidence":{"type":"number"},
+    "repeat":{"type":"string","enum":["none","weekly","monthly","quarterly","yearly"]}},
     "required":["amount","currency","description","category","occurred_at","confidence"],
-    "propertyOrdering":["amount","currency","description","category","occurred_at","note","confidence"]}},
+    "propertyOrdering":["amount","currency","description","category","occurred_at","note","confidence","repeat"]}},
   "reply":{"type":"string","nullable":true}},
  "required":["transcript","entries"],"propertyOrdering":["transcript","entries","reply"]}`);
 
@@ -53,6 +54,8 @@ const EXPECTED_INSTRUCTION = [
   '- category: the best match from the list; otherwise "Other".',
   '- note: only useful extras (split, who with, half fare, items on a receipt); else null.',
   '- confidence: 0..1 for the whole entry.',
+  '- repeat: "weekly", "monthly", "quarterly" or "yearly" when the person says it comes back on that beat ("every month", "each year", "every 3 months", rent, a subscription they name as monthly); otherwise "none".',
+  '- For a repeating bill, occurred_at is the day it is due next: "Netflix 18.90 every month on the 15th" said before the 15th is due on the 15th of this month, after it on the 15th of next month. Without a day, now.',
   '- transcript: the verbatim words for audio; the input text for text; "" for images.',
   "- If nothing is an expense, return entries: [] and a one-sentence reply in the person's language saying what was missing.",
 ].join('\n');
@@ -499,7 +502,7 @@ describe('parseExpenses: response parsing', () => {
     const result = await parseExpenses(CFG, { kind: 'text', text: 'Coffee 4.50' }, CTX);
     expect(result).toEqual({
       transcript: 'Coffee 4.50',
-      entries: [{ amount_cents: 450, currency: 'CHF', description: 'Coffee', category: 'Dining', occurred_at: '2026-10-05T14:30', note: null, confidence: 0.9 }],
+      entries: [{ amount_cents: 450, currency: 'CHF', description: 'Coffee', category: 'Dining', occurred_at: '2026-10-05T14:30', note: null, confidence: 0.9, repeat: null }],
       reply: null,
     });
   });
@@ -524,14 +527,31 @@ describe('parseExpenses: response parsing', () => {
     expect(parseResponseText(text, CTX)).toEqual({
       transcript: 'coffee and the rest',
       entries: [
-        { amount_cents: 435, currency: 'EUR', description: 'Migros lunch', category: 'Dining', occurred_at: '2026-10-04T12:40', note: null, confidence: 1 },
-        { amount_cents: 2000, currency: 'CHF', description: 'Expense', category: 'Santé', occurred_at: '2026-10-05T14:30', note: null, confidence: 0 },
-        { amount_cents: 1250, currency: 'CHF', description: 'Rent', category: null, occurred_at: '2026-10-04T14:30', note: 'split with Anna', confidence: 0.8 },
-        { amount_cents: 300, currency: 'CHF', description: 'Bus', category: null, occurred_at: '2026-10-05T14:30', note: null, confidence: 0.5 },
-        { amount_cents: 700, currency: 'CHF', description: 'Expense', category: null, occurred_at: '2026-10-05T14:30', note: null, confidence: 0.5 },
+        { amount_cents: 435, currency: 'EUR', description: 'Migros lunch', category: 'Dining', occurred_at: '2026-10-04T12:40', note: null, confidence: 1, repeat: null },
+        { amount_cents: 2000, currency: 'CHF', description: 'Expense', category: 'Santé', occurred_at: '2026-10-05T14:30', note: null, confidence: 0, repeat: null },
+        { amount_cents: 1250, currency: 'CHF', description: 'Rent', category: null, occurred_at: '2026-10-04T14:30', note: 'split with Anna', confidence: 0.8, repeat: null },
+        { amount_cents: 300, currency: 'CHF', description: 'Bus', category: null, occurred_at: '2026-10-05T14:30', note: null, confidence: 0.5, repeat: null },
+        { amount_cents: 700, currency: 'CHF', description: 'Expense', category: null, occurred_at: '2026-10-05T14:30', note: null, confidence: 0.5, repeat: null },
       ],
       reply: null,
     });
+  });
+
+  it('reads the beat of a repeating bill; anything else is a one-off', () => {
+    const entries = ['monthly', ' Yearly ', 'none', 'daily', null, undefined].map((repeat) => ({ amount: 1, description: 'Bill', repeat }));
+    const result = parseResponseText(JSON.stringify({ transcript: '', entries }), CTX);
+    expect(result.entries.map((e) => e.repeat)).toEqual(['monthly', 'yearly', null, null, null, null]);
+  });
+
+  it('puts what is said on a day picked in the bills calendar on that day, and says so in the instruction', () => {
+    const ctx: ParseContext = { ...CTX, billDay: '2026-10-30' };
+    const result = parseResponseText(JSON.stringify({ transcript: '', entries: [{ amount: 140, description: 'Piano lessons', occurred_at: '2026-10-05T14:30', repeat: 'monthly' }] }), ctx);
+    expect(result.entries[0]).toMatchObject({ occurred_at: '2026-10-30T14:30', repeat: 'monthly' });
+    const lines = buildParseSystemInstruction(ctx).split('\n');
+    expect(lines[lines.length - 1]).toBe(
+      'The person picked Friday 2026-10-30 in their bills calendar: what they say is a bill due that day. Use that day for occurred_at, and repeat "monthly" unless they name another beat, or "none" if they say it is just once.',
+    );
+    expect(buildParseSystemInstruction(CTX)).not.toContain('bills calendar');
   });
 
   it('uses the French fallback description', () => {

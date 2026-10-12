@@ -36,6 +36,11 @@ straight from your browser, and nobody but you ever sees your receipts.
 - A monthly report for every month (total vs budget and the month before, categories, biggest
   expenses, six-month history, an optional two-sentence Gemini summary) that saves as a PDF; the
   first-of-month notification opens it.
+- Recurring bills: say "Netflix 18.90 every month on the 15th" and it becomes a bill. Tally spots
+  the same price on a steady beat in your past entries and offers to keep it, a calendar shows
+  what is paid and still to pay (tap a day and say a bill to put it there), and each bill either
+  logs itself on the day or asks you first. Home keeps it short: the next bill, anything due, and
+  your last two days, with the rest of the month faded below.
 - Ask your data in plain language: "how much on coffee this month?"
 - Push notifications: a daily reminder, alerts at 50 / 80 / 100 % of the budget and of each
   category budget, a Monday summary and a first-of-month report.

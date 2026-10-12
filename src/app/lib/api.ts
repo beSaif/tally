@@ -5,6 +5,12 @@
  * Signing in is not a call: the browser leaves for `/api/auth/google/start` and comes back signed in.
  */
 import type {
+  Bill,
+  BillDetail,
+  BillDueInput,
+  BillPatch,
+  BillsSync,
+  BillSuggestion,
   Bootstrap,
   CategoriesInput,
   Category,
@@ -14,6 +20,7 @@ import type {
   EntryPatch,
   MonthsSummary,
   ErrorCode,
+  NewBill,
   NewEntry,
   PushSubscriptionInput,
   PushSubscriptionRow,
@@ -140,6 +147,18 @@ export const api = {
   createEntries: (entries: NewEntry[]) => request<{ entries: Entry[] }>('POST', '/entries', { entries }),
   patchEntry: (id: string, patch: EntryPatch) => request<{ entry: Entry }>('PATCH', `/entries/${encodeURIComponent(id)}`, patch),
   deleteEntry: (id: string) => request<void>('DELETE', `/entries/${encodeURIComponent(id)}`),
+
+  // ---- bills ----
+  bills: () => request<{ bills: Bill[] }>('GET', '/bills'),
+  syncBills: (today: string) => request<BillsSync>('POST', '/bills/sync', { today }),
+  bill: (id: string, opts?: RequestOptions) => request<BillDetail>('GET', `/bills/${encodeURIComponent(id)}`, undefined, opts),
+  createBill: (body: NewBill) => request<{ bill: Bill; entry: Entry | null }>('POST', '/bills', body),
+  patchBill: (id: string, patch: BillPatch) => request<{ bill: Bill }>('PATCH', `/bills/${encodeURIComponent(id)}`, patch),
+  deleteBill: (id: string) => request<void>('DELETE', `/bills/${encodeURIComponent(id)}`),
+  payBill: (id: string, body: BillDueInput) => request<{ bill: Bill; entry: Entry }>('POST', `/bills/${encodeURIComponent(id)}/pay`, body),
+  skipBill: (id: string, body: BillDueInput) => request<{ bill: Bill }>('POST', `/bills/${encodeURIComponent(id)}/skip`, body),
+  billSuggestions: (today: string) => request<{ suggestions: BillSuggestion[] }>('GET', `/bills/suggestions${q({ today })}`),
+  dismissSuggestion: (key: string) => request<void>('POST', '/bills/suggestions/dismiss', { key }),
 
   // ---- reports ----
   summary: (query: SummaryQuery, opts?: RequestOptions) => request<Summary>('GET', `/summary${q({ ...query })}`, undefined, opts),
