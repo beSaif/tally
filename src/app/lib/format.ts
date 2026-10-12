@@ -3,7 +3,7 @@
  * (day 'YYYY-MM-DD', minute 'YYYY-MM-DDTHH:MM'); labels are built from Intl parts so the order is
  * the same in every engine ("Sun 04", "dim. 04"). Uppercasing is left to CSS.
  */
-import type { Entry, ResolvedLanguage } from '@shared/api';
+import type { Cadence, Entry, ResolvedLanguage } from '@shared/api';
 import { addDays, daysBetween, parseDay, type DayRange, type PeriodKind, isoWeek, toLocalDay } from '@shared/dates';
 import { localeOf, translate } from '../i18n';
 
@@ -187,4 +187,29 @@ export function comparedLabel(kind: PeriodKind, prev: DayRange, compared: DayRan
 /** Plain decimal for an amount input ("21.00"), never grouped so it round-trips through parseAmount. */
 export function amountInputValue(cents: number): string {
   return (cents / 100).toFixed(2);
+}
+
+/** "Thu 15 Oct" / "jeu. 15 oct.". */
+export function weekdayDayMonth(day: string, language: ResolvedLanguage): string {
+  const p = parts(dayToDate(day), language, { weekday: 'short', day: 'numeric', month: 'short' });
+  return `${p.weekday ?? ''} ${p.day ?? ''} ${p.month ?? ''}`.trim();
+}
+
+/** "15th" / "15" ("1er" in French): a day of the month in a sentence. */
+export function ordinalDay(d: number, language: ResolvedLanguage): string {
+  if (language === 'fr') return d === 1 ? '1er' : String(d);
+  const tens = d % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][d % 10] ?? 'th');
+  return `${d}${suffix}`;
+}
+
+/** "Monthly, on the 15th", "Weekly, on Wednesday", "Yearly, on 2 Feb", from the bill's anchor day. */
+export function cadenceLabel(cadence: Cadence, anchor: string, language: ResolvedLanguage): string {
+  const { d } = parseDay(anchor);
+  if (cadence === 'weekly') {
+    const weekday = parts(dayToDate(anchor), language, { weekday: 'long' }).weekday ?? '';
+    return translate(language, 'bills.on.weekly', { weekday });
+  }
+  if (cadence === 'yearly') return translate(language, 'bills.on.yearly', { date: dayShortMonth(anchor, language) });
+  return translate(language, cadence === 'monthly' ? 'bills.on.monthly' : 'bills.on.quarterly', { nth: ordinalDay(d, language) });
 }

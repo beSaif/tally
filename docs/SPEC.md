@@ -201,10 +201,12 @@ Default categories by language: EN `Groceries, Dining, Transport, Home, Health, 
 
 ### 3.3 Home (design A.1)
 
-- `.topline`: left `.wordmark` (tap → `/settings`); right: the **Ledger | Analytics** switch (a two-tab `.views` pill, mono 10.5px uppercase, the current one inked; Analytics pushes `/overview`, Ledger goes back to `/`, so the phone's back button matches, and it returns to the period Analytics was left on; each tab and the gear get a 44px-tall touch area without growing) followed by a 28px ghost gear icon (tap → `/settings`). Home and Analytics share this top line.
+- `.topline`: left `.wordmark` (tap → `/settings`); right: the **Ledger | Analytics** switch (a two-tab `.views` pill, mono 10.5px uppercase, the current one inked; Analytics pushes `/overview`, Ledger goes back to `/`, so the phone's back button matches, and it returns to the period Analytics was left on; each tab and the gear get a 44px-tall touch area without growing) followed by a 28px ghost calendar icon (tap → `/bills`, §3.10) and a 28px ghost gear icon (tap → `/settings`). Home and Analytics share this top line.
 - Hero (padding 22px 0 18px): `.lbl` "Spent this month" · `.big` 58px total with faint decimals + `.cur` currency · row (margin-top 14px) mono 11px mute: left `"64% OF 2 000"` (only when a budget is set; `round(total/budget*100)`; budget formatted without decimals when whole), right `"26 DAYS LEFT"` (days remaining after today) · `.track`/`.fill` width = min(100, pct)% (fill turns `--acc` at ≥100%). Without budget: only the "days left" text, no bar.
+- Bills (§3.10), between the hero and the list: a **Due** card per "ask me first" bill whose day has come (orange "● DUE TODAY" / "● DUE SINCE THU 1 OCT", name, amount, category · cadence, **Not yet** (hidden until tomorrow, remembered on the device) · **Paid it**); a `--paper` strip with the next bill still to come ("Swisscom mobile · Wed 14 Oct", "Next bill · 3 more this month", amount, › → `/bills?d=…`); and the first habit that looks like a bill ("● LOOKS LIKE A BILL", "20 Jul · 20 Aug · 21 Sept, same amount · Monthly", **Not a bill** · **Make it a bill** → the bill sheet).
 - Entries, grouped by day (newest day first, newest entry first within a day): `.daygrp` label "TODAY" / "YESTERDAY" / "SUN 04" (weekday short + day) with the day total on the right; `.entries` rows: time `HH:MM`, name + category (uncategorised shows "Other"), amount. Tap a row → **Entry sheet** (§3.7). Rows added in this session get a 1.5s fading `--acc` 2px left bar.
-- The list shows the current month. At the bottom a mono 11px link "SHOW SEPTEMBER →" loads the previous month under a `.daygrp`-style month header "SEPTEMBER 2026 · 1 102.30"; repeatable. Bottom padding leaves room for the composer (≈ 120px + safe-area).
+- Only the two most recent days with entries show in full. The rest of the month sits below them, clipped to ~190px and faded out (a mask, not reachable by tap or screen reader), with a pill **Earlier this month · 1 194.00 ⌄** that opens it; entries that paid a bill carry a repeat glyph before their category.
+- Opened, the list shows the rest of the current month. At the bottom a mono 11px link "SHOW SEPTEMBER →" loads the previous month under a `.daygrp`-style month header "SEPTEMBER 2026 · 1 102.30"; repeatable. Bottom padding leaves room for the composer (≈ 120px + safe-area).
 - Empty month: mute 14.5px text "Nothing logged yet. Type a line or tap the mic." centred vertically in the list area.
 - Pull-to-refresh is not needed; refetch on `visibilitychange` → visible and on `focus`.
 
@@ -233,6 +235,18 @@ Nothing parsed (`entries` empty): `.quote` of the input + Gemini's `reply` line 
 Error: a 14px `--err` line mapped from the Gemini error code (invalid key → "Gemini rejected your key. Check it in Settings." with a link; quota → "Gemini's free tier is out of requests for now. Try again in a minute."; network → "No connection to Gemini."; bad response → "Gemini answered something I could not read.") + `.btns` **Close** · **Try again**.
 
 Saving: `POST /api/entries { entries:[…] }` with `source` = `voice|text|photo` and `raw_input` = transcript/text/`"photo"`. Close the sheet, scroll the list to top, highlight the new rows. On a 4xx/5xx keep the sheet open and show the error line.
+
+Bills: when Gemini says an entry repeats (`repeat`, §7.4), the readout adds a highlighted **Repeats** row ("↻ Monthly, on the 15th") and **When** becomes **First due** (a future day) or **Paid** (today or earlier); below the `.kv`, "WHEN IT COMES DUE" with a two-way switch **Log it for me** (default) | **Ask me first** and a one-line hint; the primary button reads **Save bill**. Edit mode adds a **Repeats** chip row (Just once, Weekly, Monthly, Every 3 months, Yearly). Saving creates the bill (`POST /api/bills`); when its day has come, its first payment is logged at the same time (`paid_at`). Toast "Netflix saved · first on Thu 15 Oct" / "Rent logged · next on Thu 5 Nov". In a batch, repeating rows say "↻ Monthly ·" before their category.
+
+### 3.10 Bills (`/bills`, `/bills?id=…`)
+
+A recurring bill comes due on a steady beat (weekly, monthly, every 3 months, yearly) counted from its first due day (§5). Each payment is an ordinary entry linked to the bill. "Log it for me" bills are logged by themselves at 09:00 on their day: every open of Home or the calendar calls `POST /bills/sync` with the device's day. "Ask me first" bills wait on Home's **Due** card.
+
+- **Calendar** (`/bills?d=YYYY-MM-DD`, default today): topline ← Back · ‹ OCTOBER 2026 ›; **Paid** (mute) and **Still to pay** totals for the month, and a "● 2 FOUND" pill when habits look like bills; a Monday-first month grid (day number, a small amount tag on due days; paid days mute; today ringed; the picked day inked with an orange tag); the picked day's bills as rows (↻, name, "Paid · Bills · Monthly · Ask me first", amount; tap → the bill), or "Nothing due · Say a bill to put it on this day." The composer stays at the bottom with "A bill on 30 Oct — or just talk": what is said there is a bill on the picked day (§7.4) and goes through the capture sheet.
+- **Found** sheet (the pill): "These look like bills" + one line on how they were found; per habit name, amount, cadence and the days seen, **Not a bill** · **Keep** (→ the bill sheet).
+- **Bill sheet** (keeping a habit, editing a bill): the days seen (keep), Amount, What, Category chips, Repeats chips, Next due (date), when it comes due; **Not a bill** / **Cancel** · **Save bill** / **Save**.
+- **One bill** (`?id=`): topline ← Back · BILL · Edit; "↻ BILLS · MONTHLY", name 28px/700, amount 48px mono with "CHF · Monthly, on the 14th" (and "About 27.92 a month" for other beats); NEXT with "in 9 days": the next three due days in boxes, the first inked; the when-due switch (saved at once); PAID THROUGH TALLY · SINCE 14 SEPT: the entries that paid it; **Skip this one** · **Mark paid now**; a red **Stop this bill** link (inline confirm; what it paid stays in the ledger).
+- Habits ("looks like a bill"): the same description (case-, accent- and space-insensitive) at the same amount, 3+ times 26–35 days apart (monthly, last one ≤ 45 days ago), 4+ times 6–8 days apart (weekly), or 3+ times 84–98 days apart (quarterly), within the last 400 days; never one that already is a bill or was dismissed.
 
 ### 3.6 Analytics (design A.3 + C.3)
 
@@ -310,10 +324,18 @@ categories(id PK, user_id FK CASCADE, name NOT NULL, position INT 0, created_at,
 entries(id PK, user_id FK CASCADE, amount_cents INT ≥ 0, currency, description NOT NULL, category_id FK→categories ON DELETE SET NULL,
         occurred_at TEXT, note NULL, source 'text'|'voice'|'photo'|'manual', raw_input NULL, created_at, updated_at)
   INDEX entries(user_id, occurred_at)
+bills(id PK, user_id FK CASCADE, amount_cents INT ≥ 0, currency, description, category_id FK→categories ON DELETE SET NULL,
+      cadence 'weekly'|'monthly'|'quarterly'|'yearly', anchor 'YYYY-MM-DD', next_due 'YYYY-MM-DD', mode 'auto'|'ask', created_at, updated_at)
+  INDEX bills(user_id, next_due)
+entries.bill_id FK→bills ON DELETE SET NULL (the bill an entry paid)
+bill_dismissals(user_id FK CASCADE, key (folded description '|' amount), created_at, PRIMARY KEY(user_id, key))
 push_subscriptions(id PK, user_id FK CASCADE, endpoint UNIQUE, p256dh, auth, user_agent, lang 'en', tz 'UTC', created_at, last_seen_at, failures 0)
 notification_log(user_id FK CASCADE, kind, period_key, sent_at, PRIMARY KEY(user_id, kind, period_key)) INDEX(sent_at)
 reminder_skips(user_id FK CASCADE, day 'YYYY-MM-DD', PRIMARY KEY(user_id, day)) INDEX(day)
 ```
+
+A bill's occurrence k is `anchor` + k × cadence, clamped to the month's last day (a bill on the 31st falls on
+28 Feb and is back on the 31st in March); `next_due` is the first occurrence not paid or skipped yet.
 
 The first sign-in of a Google account creates the `users` row, a `settings` row with defaults and the
 default categories for the language the sign-in link carried (`?lang=en|fr`). Later sign-ins find the row
@@ -345,6 +367,16 @@ request origin (else 403). `requireUser` middleware puts `{ id, email }` on `c.v
 | `POST /entries` | `{ entries: NewEntry[] }` (1..50) → 201 `{ entries }`. `NewEntry = { amount_cents, currency?, description, category_id?: string\|null, category?: string\|null (name; resolved case-insensitively to an id, unknown → null), occurred_at, note?, source, raw_input? }`. Triggers budget alerts (§8.4). |
 | `PATCH /entries/:id` | `Partial<NewEntry>` → `{ entry }`. 404 if not the user's. Triggers budget alerts. |
 | `DELETE /entries/:id` | → 204. |
+| `GET /bills` | → `{ bills }` ordered by `next_due`. `Bill = { id, amount_cents, currency, description, category_id, category_name, cadence, anchor, next_due, mode, created_at, updated_at }`. |
+| `POST /bills/sync` | `{ today: 'YYYY-MM-DD' }` → `{ bills, logged }`: logs every "auto" bill occurrence up to `today` (09:00, at most 24 per bill) as an entry and moves the bill on. Each payment is guarded by the `next_due` it was decided on, so repeating the call logs nothing twice. Triggers budget alerts. |
+| `POST /bills` | `NewBill = { amount_cents, currency?, description, category_id?, cadence, first_due, mode, paid_at?: 'YYYY-MM-DDTHH:MM', source?, raw_input? }` → 201 `{ bill, entry }`. With `paid_at` the first occurrence is logged as an entry and `next_due` is the next one; else `entry` is null. At most 200 bills. |
+| `GET /bills/:id` | → `{ bill, entries }` (the 12 latest entries that paid it). 404 if not the user's. |
+| `PATCH /bills/:id` | `Partial<{ amount_cents, description, category_id, cadence, next_due, mode }>` (at least one) → `{ bill }`. A `next_due` on the bill's beat keeps `anchor`; a new cadence or a day off the beat makes `next_due` the new anchor. |
+| `DELETE /bills/:id` | → 204. Entries that paid it stay (`bill_id` → NULL). |
+| `POST /bills/:id/pay` | `{ due, occurred_at? }` → `{ bill, entry }`: logs the due occurrence (default `due`T09:00) and moves on. `due` ≠ the bill's `next_due` → 409 `validation` (another tap or device was first). Triggers budget alerts. |
+| `POST /bills/:id/skip` | `{ due }` → `{ bill }`; 409 as above. |
+| `GET /bills/suggestions?today=` | → `{ suggestions: [{ key, description, amount_cents, currency, category_id, cadence, seen: string[], next_due }] }` (≤ 5, rules in §3.10). |
+| `POST /bills/suggestions/dismiss` | `{ key }` → 204 ("Not a bill"). |
 | `GET /summary/months?from=YYYY-MM&to=YYYY-MM` | → `MonthsSummary` = `{ months: [{ month, total_cents, count, by_category: [{ category_id, name, total_cents, count }] }] }`, every month of the range oldest first (empty months included), at most 24. Categories within a month sorted like `/summary`. |
 | `GET /summary?from&to&prev_from?&prev_to?` | → `Summary` = `{ from, to, total_cents, count, by_category: [{ category_id, name, total_cents, count, prev_total_cents? }], by_day: [{ day, total_cents, count }], previous?: { total_cents, count } }`. Categories sorted by `total_cents` desc; uncategorised as `{ category_id: null, name: null }`. |
 | `GET /export.csv?from&to` | `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="tally-<from>_<to>.csv"`. Header `date,time,amount,currency,description,category,note,source,id`; RFC 4180 quoting; amount as `12.50`; UTF-8 BOM. |
@@ -395,9 +427,13 @@ Rules:
 - category: the best match from the list; otherwise "Other".
 - note: only useful extras (split, who with, half fare, items on a receipt); else null.
 - confidence: 0..1 for the whole entry.
+- repeat: "weekly", "monthly", "quarterly" or "yearly" when the person says it comes back on that beat ("every month", "each year", "every 3 months", rent, a subscription they name as monthly); otherwise "none".
+- For a repeating bill, occurred_at is the day it is due next: "Netflix 18.90 every month on the 15th" said before the 15th is due on the 15th of this month, after it on the 15th of next month. Without a day, now.
 - transcript: the verbatim words for audio; the input text for text; "" for images.
 - If nothing is an expense, return entries: [] and a one-sentence reply in the person's language saying what was missing.
 ```
+
+From the bills calendar (§3.10) one more line follows: `The person picked {weekday} {YYYY-MM-DD} in their bills calendar: what they say is a bill due that day. Use that day for occurred_at, and repeat "monthly" unless they name another beat, or "none" if they say it is just once.` The app also forces that day onto `occurred_at`.
 
 Response schema (OpenAPI subset, `responseSchema`):
 
@@ -407,9 +443,10 @@ Response schema (OpenAPI subset, `responseSchema`):
   "entries":{"type":"array","items":{"type":"object","properties":{
     "amount":{"type":"number"},"currency":{"type":"string"},"description":{"type":"string"},
     "category":{"type":"string"},"occurred_at":{"type":"string"},
-    "note":{"type":"string","nullable":true},"confidence":{"type":"number"}},
+    "note":{"type":"string","nullable":true},"confidence":{"type":"number"},
+    "repeat":{"type":"string","enum":["none","weekly","monthly","quarterly","yearly"]}},
     "required":["amount","currency","description","category","occurred_at","confidence"],
-    "propertyOrdering":["amount","currency","description","category","occurred_at","note","confidence"]}},
+    "propertyOrdering":["amount","currency","description","category","occurred_at","note","confidence","repeat"]}},
   "reply":{"type":"string","nullable":true}},
  "required":["transcript","entries"],"propertyOrdering":["transcript","entries","reply"]}
 ```
@@ -426,8 +463,8 @@ Period: {label} ({from}..{to}). Total: {total}. By category: {name total, …}. 
 ```ts
 export type GeminiConfig = { apiKey: string; model: string };
 export type Lang = 'en' | 'fr';
-export type ParseContext = { now: Date; timeZone: string; currency: string; language: Lang; categories: string[] };
-export type ParsedEntry = { amount_cents: number; currency: string; description: string; category: string | null; occurred_at: string; note: string | null; confidence: number };
+export type ParseContext = { now: Date; timeZone: string; currency: string; language: Lang; categories: string[]; billDay?: string };
+export type ParsedEntry = { amount_cents: number; currency: string; description: string; category: string | null; occurred_at: string; note: string | null; confidence: number; repeat: Cadence | null };
 export type ParseResult = { transcript: string; entries: ParsedEntry[]; reply: string | null };
 export type ParseInput = { kind: 'text'; text: string } | { kind: 'audio'; blob: Blob } | { kind: 'image'; blob: Blob };
 export type AskContext = ParseContext & { periodLabel: string; from: string; to: string; totalCents: number; byCategory: Array<{ name: string; totalCents: number }>; entries: Array<{ occurred_at: string; amount_cents: number; currency: string; description: string; category: string | null; note: string | null }> };

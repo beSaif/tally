@@ -186,7 +186,7 @@ test('sign in, log, edit, delete, overview, export, ask, notifications, log out 
   // ---- settings: notifications on this device, then a test notification
   await page.getByRole('tablist', { name: 'Views' }).getByRole('tab', { name: 'Ledger' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await page.locator('.topline .ibtn').click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
   const device = page.getByRole('switch', { name: 'Notifications on this device' });
   await expect(device).toHaveAttribute('aria-checked', 'false');

@@ -1,6 +1,6 @@
 import { t } from '../i18n';
 import { back, navigate } from '../router';
-import { IconGear } from './Icons';
+import { IconCalendar, IconGear } from './Icons';
 import Wordmark from './Wordmark';
 
 export type View = 'ledger' | 'analytics';
@@ -32,6 +32,9 @@ export default function AppTopline({ view }: { view: View }) {
           <ViewTab on={view === 'ledger'} label={t('nav.ledger')} go={() => back('/')} />
           <ViewTab on={view === 'analytics'} label={t('nav.analytics')} go={() => navigate(lastAnalytics)} />
         </span>
+        <button type="button" class="ibtn ghost xs" aria-label={t('nav.bills')} onClick={() => navigate('/bills')}>
+          <IconCalendar />
+        </button>
         <button type="button" class="ibtn ghost xs" aria-label={t('common.settings')} onClick={() => navigate('/settings')}>
           <IconGear />
         </button>

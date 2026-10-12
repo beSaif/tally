@@ -14,6 +14,7 @@ export interface EntryRow {
   occurred_at: string;
   note: string | null;
   source: EntrySource;
+  bill_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -23,7 +24,7 @@ export interface EntryRow {
  * survive; the user_id condition means a category name can only ever come from the owner's list.
  */
 export const ENTRY_SELECT = `SELECT e.id, e.amount_cents, e.currency, e.description, e.category_id, c.name AS category_name,
-       e.occurred_at, e.note, e.source, e.created_at, e.updated_at
+       e.occurred_at, e.note, e.source, e.bill_id, e.created_at, e.updated_at
   FROM entries e LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = e.user_id`;
 
 /**
@@ -43,6 +44,7 @@ export function entryFromRow(r: EntryRow): Entry {
     occurred_at: r.occurred_at,
     note: r.note,
     source: r.source,
+    bill_id: r.bill_id,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };

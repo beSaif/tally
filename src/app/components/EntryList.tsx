@@ -2,6 +2,7 @@ import type { Entry } from '@shared/api';
 import { formatAmount } from '@shared/money';
 import { lang, t } from '../i18n';
 import { dayLabel, groupByDay, timeOf } from '../lib/format';
+import { RepeatMark } from './BillBits';
 
 interface Props {
   entries: readonly Entry[];
@@ -54,7 +55,12 @@ function EntryRow({ entry, currency, fresh, onOpen, showCategory }: { entry: Ent
       <span class="t">{timeOf(entry.occurred_at)}</span>
       <span>
         <span class="n">{entry.description}</span>
-        {showCategory ? <span class="c">{category}</span> : null}
+        {showCategory || entry.bill_id ? (
+          <span class="c">
+            {entry.bill_id ? <RepeatMark /> : null}
+            {showCategory ? category : t('bills.fromBill')}
+          </span>
+        ) : null}
       </span>
       <span class="a">
         {formatAmount(entry.amount_cents)}

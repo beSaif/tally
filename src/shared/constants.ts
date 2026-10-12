@@ -46,3 +46,8 @@ export const BUDGET_THRESHOLDS = [50, 80, 100] as const;
 export const CRON_SLOT_MINUTES = 15;
 export const WEEKLY_HOUR = '09:00';
 export const MONTHLY_HOUR = '09:00';
+
+/** Time of day an automatic bill payment is logged at, on its due day. */
+export const BILL_TIME = '09:00';
+/** Bills one account may have. */
+export const MAX_BILLS = 200;

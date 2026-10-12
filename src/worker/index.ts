@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth';
 import { settingsRoutes } from './routes/settings';
 import { categoriesRoutes } from './routes/categories';
 import { entriesRoutes } from './routes/entries';
+import { billsRoutes } from './routes/bills';
 import { summaryRoutes } from './routes/summary';
 import { exportRoutes } from './routes/export';
 import { pushRoutes } from './routes/push';
@@ -26,6 +27,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/settings', settingsRoutes);
 app.route('/api/categories', categoriesRoutes);
 app.route('/api/entries', entriesRoutes);
+app.route('/api/bills', billsRoutes);
 app.route('/api/summary', summaryRoutes);
 app.route('/api', exportRoutes); // defines GET /export.csv
 app.route('/api/push', pushRoutes);

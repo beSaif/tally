@@ -1,32 +1,49 @@
-/** Home (design A.1, spec §3.3): month total, entries by day, composer, capture & entry sheets. */
+/**
+ * Home (design A.1, spec §3.3): month total, what bills need, the last two days of entries with the
+ * rest of the month faded below them, composer, capture & entry sheets.
+ */
 import { useEffect, useState } from 'preact/hooks';
-import type { Entry } from '@shared/api';
+import type { BillSuggestion, Entry } from '@shared/api';
 import { formatAmount } from '@shared/money';
 import { lang, t } from '../i18n';
 import { capture, composerFocusRequest } from '../lib/capture';
-import { monthLong, monthLongYear, sumCents, todayLocal } from '../lib/format';
+import { loadSuggestions, syncBills } from '../lib/bills';
+import { dayOf, groupByDay, monthLong, monthLongYear, sumCents, todayLocal } from '../lib/format';
 import { offerInstallOnce } from '../lib/install';
 import { freshIds, loadCurrentMonth, loadOlderMonth, months, nextOlderMonth, type MonthBlock } from '../lib/ledger';
 import { currency, settings } from '../lib/store';
 import { onAppVisible } from '../lib/visible';
 import { route, setQuery } from '../router';
 import AppTopline from '../components/AppTopline';
+import BillSheet from '../components/BillSheet';
 import CaptureSheet from '../components/CaptureSheet';
 import Composer from '../components/Composer';
 import EntryList from '../components/EntryList';
 import EntrySheet from '../components/EntrySheet';
 import Hero from '../components/Hero';
+import HomeBills from '../components/HomeBills';
+import { IconChevronDown } from '../components/Icons';
+
+/** Days shown in full at the top; the rest of the month waits, faded, below them. */
+const RECENT_DAYS = 2;
 
 export default function Home() {
   const [open, setOpen] = useState<Entry | null>(null);
+  const [keeping, setKeeping] = useState<BillSuggestion | null>(null);
+  const [earlierOpen, setEarlierOpen] = useState(false);
   const today = todayLocal();
   const language = lang.value;
   const compose = route.value.query.get('compose');
 
   useEffect(() => {
     void loadCurrentMonth();
-    // Another device may have logged something: refetch when the app comes back to the front.
-    return onAppVisible(() => void loadCurrentMonth());
+    void syncBills();
+    void loadSuggestions();
+    // Another device may have logged something, or a bill came due: refetch when the app comes back.
+    return onAppVisible(() => {
+      void loadCurrentMonth();
+      void syncBills();
+    });
   }, []);
 
   useEffect(() => {
@@ -46,12 +63,20 @@ export default function Home() {
   const total = current ? sumCents(current.entries) : 0;
   const nextMonth = nextOlderMonth.value;
   const isEmpty = current?.status === 'ready' && current.entries.length === 0;
+  const recentDays = new Set(groupByDay(current?.entries ?? []).slice(0, RECENT_DAYS).map((g) => g.day));
+  const recent = (current?.entries ?? []).filter((e) => recentDays.has(dayOf(e.occurred_at)));
+  const earlier = (current?.entries ?? []).filter((e) => !recentDays.has(dayOf(e.occurred_at)));
+  const hasEarlier = earlier.length > 0;
+  // Older months live under "earlier" too: nothing below the two days shows until it is opened.
+  const showRest = earlierOpen || !hasEarlier;
 
   return (
     <main class={`screen screen--list home${capture.value.kind !== 'idle' ? ' capturing' : ''}`}>
       <AppTopline view="ledger" />
 
       <Hero totalCents={total} budgetCents={settings.value?.budget_cents ?? null} currency={currency.value} today={today} />
+
+      <HomeBills onKeep={setKeeping} />
 
       {current?.status === 'error' && current.entries.length === 0 ? (
         <div class="empty">
@@ -68,15 +93,31 @@ export default function Home() {
           <p>{t('home.empty')}</p>
         </div>
       ) : null}
-      {current && current.entries.length > 0 ? (
-        <EntryList entries={current.entries} today={today} currency={currency.value} fresh={freshIds.value} onOpen={setOpen} />
+      {recent.length > 0 ? <EntryList entries={recent} today={today} currency={currency.value} fresh={freshIds.value} onOpen={setOpen} /> : null}
+
+      {hasEarlier ? (
+        <section class={`earlier${earlierOpen ? ' open' : ''}`}>
+          <div class="earlier-body" aria-hidden={!earlierOpen} {...(earlierOpen ? {} : { inert: true })}>
+            <EntryList entries={earlier} today={today} currency={currency.value} fresh={freshIds.value} onOpen={setOpen} />
+          </div>
+          {earlierOpen ? null : (
+            <button type="button" class="earlier-toggle" aria-expanded={false} onClick={() => setEarlierOpen(true)}>
+              <span>
+                {t('home.earlier')} · {formatAmount(sumCents(earlier))}
+              </span>
+              <IconChevronDown />
+            </button>
+          )}
+        </section>
       ) : null}
 
-      {older.map((b) => (
-        <OlderMonth key={b.key} block={b} today={today} onOpen={setOpen} />
-      ))}
+      {showRest
+        ? older.map((b) => (
+            <OlderMonth key={b.key} block={b} today={today} onOpen={setOpen} />
+          ))
+        : null}
 
-      {nextMonth ? (
+      {showRest && nextMonth ? (
         <button type="button" class="more" onClick={() => void loadOlderMonth()}>
           {t('home.showMonth', { month: monthLong(nextMonth, language) })}
         </button>
@@ -85,6 +126,7 @@ export default function Home() {
       <Composer />
       <CaptureSheet />
       {open ? <EntrySheet key={open.id} entry={open} onClose={() => setOpen(null)} /> : null}
+      {keeping ? <BillSheet key={keeping.key} target={{ kind: 'keep', suggestion: keeping }} onClose={() => setKeeping(null)} /> : null}
     </main>
   );
 }

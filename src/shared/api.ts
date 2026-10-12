@@ -76,6 +76,8 @@ export interface Entry {
   occurred_at: string; // 'YYYY-MM-DDTHH:MM' local
   note: string | null;
   source: EntrySource;
+  /** The recurring bill this entry paid, if any. */
+  bill_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -95,6 +97,86 @@ export interface NewEntry {
 }
 
 export type EntryPatch = Partial<NewEntry>;
+
+// ---- recurring bills ----
+export type Cadence = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+/** auto: logged by itself on the due day; ask: waits for "Paid it". */
+export type BillMode = 'auto' | 'ask';
+
+export interface Bill {
+  id: string;
+  amount_cents: number;
+  currency: string;
+  description: string;
+  category_id: string | null;
+  category_name: string | null;
+  cadence: Cadence;
+  /** The first due day; every occurrence counts from it. 'YYYY-MM-DD' */
+  anchor: string;
+  /** The first occurrence not paid or skipped yet. 'YYYY-MM-DD' */
+  next_due: string;
+  mode: BillMode;
+  created_at: number;
+  updated_at: number;
+}
+
+/** `POST /api/bills`. */
+export interface NewBill {
+  amount_cents: number;
+  currency?: string;
+  description: string;
+  category_id?: string | null;
+  cadence: Cadence;
+  /** 'YYYY-MM-DD' */
+  first_due: string;
+  mode: BillMode;
+  /** The first occurrence is already paid: log it as an entry at this minute and move on to the next. */
+  paid_at?: string | null;
+  source?: EntrySource;
+  raw_input?: string | null;
+}
+
+/** `PATCH /api/bills/:id`. A next_due off the bill's beat (or a new cadence) restarts the beat there. */
+export type BillPatch = Partial<{
+  amount_cents: number;
+  description: string;
+  category_id: string | null;
+  cadence: Cadence;
+  next_due: string;
+  mode: BillMode;
+}>;
+
+/** `POST /api/bills/:id/pay` and `/skip`: `due` is the next_due the person saw, so a second tap does nothing twice. */
+export interface BillDueInput {
+  due: string;
+  /** pay only: when it was paid, 'YYYY-MM-DDTHH:MM'. */
+  occurred_at?: string;
+}
+
+/** `GET /api/bills/:id`: the bill and the entries that paid it, newest first. */
+export interface BillDetail {
+  bill: Bill;
+  entries: Entry[];
+}
+
+/** `POST /api/bills/sync`: every bill, after logging the automatic ones that came due. */
+export interface BillsSync {
+  bills: Bill[];
+  /** Entries logged by this call. */
+  logged: Entry[];
+}
+
+/** A habit spotted in past entries that looks like a bill (`GET /api/bills/suggestions`). */
+export interface BillSuggestion {
+  key: string;
+  description: string;
+  amount_cents: number;
+  currency: string;
+  category_id: string | null;
+  cadence: Cadence;
+  seen: string[];
+  next_due: string;
+}
 
 export interface SummaryCategory {
   category_id: string | null;

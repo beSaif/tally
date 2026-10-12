@@ -1,4 +1,4 @@
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import type { Entry } from '@shared/api';
 import { DEFAULT_CURRENCY } from '@shared/constants';
 import { entriesCreateSchema, entryPatchSchema } from '@shared/schemas';
@@ -9,38 +9,11 @@ import { requireUser } from '../lib/auth';
 import { loadCategoryRefs } from '../lib/categories';
 import { ENTRY_SELECT, type EntryRow, entryFromRow, listEntries, needsCategoryNames, OWN_CATEGORY_SQL, resolveCategoryId } from '../lib/entries';
 import { readRange } from '../lib/range';
-import { maybeSendBudgetAlerts } from '../push/notify';
+import { queueAlertsFor, queueBudgetAlerts } from '../lib/alerts';
 
 const INSERT_ENTRY = `INSERT INTO entries
   (id, user_id, amount_cents, currency, description, category_id, occurred_at, note, source, raw_input, created_at, updated_at)
   VALUES (?, ?, ?, ?, ?, ${OWN_CATEGORY_SQL}, ?, ?, ?, ?, ?, ?)`;
-
-/**
- * Budget alerts run after the response. They are best effort: a missing ExecutionContext (e.g.
- * app.request without one) or any failure in the push code must never fail the write itself.
- */
-function queueBudgetAlerts(c: Context<AppEnv>, occurredAt: string): void {
-  try {
-    const ctx = c.executionCtx;
-    ctx.waitUntil(maybeSendBudgetAlerts(c.env, c.var.user.id, occurredAt).catch((err: unknown) => console.error('Budget alerts failed', err)));
-  } catch (err) {
-    console.error('Budget alerts not queued', err);
-  }
-}
-
-/**
- * The latest occurred_at of each month a batch touches. An alert is about one month's total, so a
- * batch that mixes this month with a future-dated entry must still check this month.
- */
-function latestPerMonth(occurredAts: readonly string[]): string[] {
-  const byMonth = new Map<string, string>();
-  for (const at of occurredAts) {
-    const month = at.slice(0, 7);
-    const latest = byMonth.get(month);
-    if (latest === undefined || at > latest) byMonth.set(month, at);
-  }
-  return [...byMonth.values()];
-}
 
 export const entriesRoutes = new Hono<AppEnv>();
 
@@ -88,7 +61,7 @@ entriesRoutes.post('/', requireUser, async (c) => {
     return row ? [entryFromRow(row)] : [];
   });
 
-  for (const occurredAt of latestPerMonth(input.map((e) => e.occurred_at))) queueBudgetAlerts(c, occurredAt);
+  queueAlertsFor(c, input.map((e) => e.occurred_at));
   return c.json({ entries }, 201);
 });
 

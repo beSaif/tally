@@ -22,7 +22,7 @@ beforeEach(() => {
   budgetAlerts.mockResolvedValue(undefined);
 });
 
-const ENTRY_KEYS = ['amount_cents', 'category_id', 'category_name', 'created_at', 'currency', 'description', 'id', 'note', 'occurred_at', 'source', 'updated_at'];
+const ENTRY_KEYS = ['amount_cents', 'bill_id', 'category_id', 'category_name', 'created_at', 'currency', 'description', 'id', 'note', 'occurred_at', 'source', 'updated_at'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const entry = (over: Partial<NewEntry> = {}): NewEntry => ({
