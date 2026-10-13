@@ -1,4 +1,5 @@
 import type { Bill, BillMode, Cadence, EntrySource } from '@shared/api';
+import { isOccurrence, previousBefore } from '@shared/bills';
 import type { Env } from '../env';
 
 export interface BillRow {
@@ -50,6 +51,8 @@ export interface BillEntry {
   occurredAt: string;
   /** The bill's next_due when the payment was decided: nothing is logged if it moved since. */
   due: string;
+  /** The occurrence this payment pays (`due`, or a later one when sync catches up several). */
+  paysFor: string;
   source: EntrySource;
   rawInput: string | null;
   now: number;
@@ -64,16 +67,54 @@ export function insertBillEntry(db: D1Database, e: BillEntry): D1PreparedStateme
   return db
     .prepare(
       `INSERT INTO entries
-         (id, user_id, amount_cents, currency, description, category_id, occurred_at, note, source, raw_input, bill_id, created_at, updated_at)
-       SELECT ?, b.user_id, b.amount_cents, b.currency, b.description, b.category_id, ?, NULL, ?, ?, b.id, ?, ?
+         (id, user_id, amount_cents, currency, description, category_id, occurred_at, note, source, raw_input, bill_id, bill_due, created_at, updated_at)
+       SELECT ?, b.user_id, b.amount_cents, b.currency, b.description, b.category_id, ?, NULL, ?, ?, b.id, ?, ?, ?
          FROM bills b WHERE b.id = ? AND b.user_id = ? AND b.next_due = ?`,
     )
-    .bind(e.entryId, e.occurredAt, e.source, e.rawInput, e.now, e.now, e.billId, e.userId, e.due);
+    .bind(e.entryId, e.occurredAt, e.source, e.rawInput, e.paysFor, e.now, e.now, e.billId, e.userId, e.due);
 }
 
-/** Moves a bill on from `due` to `next`; does nothing if it already moved. */
+/** Moves a bill from `due` to `next` (on, or back when a payment is deleted); does nothing if it already moved. */
 export function advanceBill(db: D1Database, userId: string, billId: string, due: string, next: string, now: number): D1PreparedStatement {
   return db
     .prepare('UPDATE bills SET next_due = ?, updated_at = MAX(?, updated_at + 1) WHERE id = ? AND user_id = ? AND next_due = ?')
     .bind(next, now, billId, userId, due);
+}
+
+/** A bill payment about to be deleted. */
+export interface PaymentRow {
+  id: string;
+  bill_id: string;
+  bill_due: string | null;
+  occurred_at: string;
+  created_at: number;
+}
+
+/**
+ * Where a bill goes back to when `payment` is deleted: the occurrence it paid becomes due again,
+ * as long as it was the bill's latest payment (deleting an older one leaves the bill where it is).
+ * Payments logged before entries.bill_due existed paid the occurrence just before next_due.
+ * Returns the advanceBill arguments that move it back, or null when it stays.
+ */
+export async function unpayTarget(db: D1Database, userId: string, payment: PaymentRow): Promise<{ from: string; to: string } | null> {
+  const bill = await db
+    .prepare('SELECT cadence, anchor, next_due FROM bills WHERE id = ? AND user_id = ?')
+    .bind(payment.bill_id, userId)
+    .first<Pick<BillRow, 'cadence' | 'anchor' | 'next_due'>>();
+  if (!bill) return null;
+  const later = payment.bill_due
+    ? db
+        .prepare('SELECT 1 FROM entries WHERE user_id = ? AND bill_id = ? AND id != ? AND bill_due >= ? LIMIT 1')
+        .bind(userId, payment.bill_id, payment.id, payment.bill_due)
+    : db
+        .prepare(
+          `SELECT 1 FROM entries WHERE user_id = ? AND bill_id = ? AND id != ?
+             AND (bill_due IS NOT NULL OR occurred_at > ? OR (occurred_at = ? AND created_at > ?)) LIMIT 1`,
+        )
+        .bind(userId, payment.bill_id, payment.id, payment.occurred_at, payment.occurred_at, payment.created_at);
+  if (await later.first()) return null;
+  const to = payment.bill_due ?? previousBefore(bill.anchor, bill.cadence, bill.next_due);
+  // Off the bill's beat (its cadence changed since) or not behind it: nothing to undo.
+  if (!to || to >= bill.next_due || !isOccurrence(bill.anchor, bill.cadence, to)) return null;
+  return { from: bill.next_due, to };
 }

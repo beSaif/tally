@@ -3,7 +3,7 @@
  * the automatic bills that came due), habits that look like bills, and what is due now.
  */
 import { computed, effect, signal } from '@preact/signals';
-import type { Bill, BillPatch, BillSuggestion, Entry, NewBill } from '@shared/api';
+import type { Bill, BillPatch, BillSuggestion, Entry, NewBill, NewEntry } from '@shared/api';
 import { foldDescription } from '@shared/bills';
 import { lang, t } from '../i18n';
 import { api, isApiError } from './api';
@@ -137,6 +137,34 @@ async function undoPay(billId: string, due: string, entryId: string): Promise<vo
   } catch {
     showToast({ text: t('toast.error') });
   }
+}
+
+/**
+ * Deletes a bill's payment from the ledger: the server moves the bill back to the occurrence it
+ * paid, if it was the latest. Undo pays that occurrence again; otherwise it re-creates the entry.
+ */
+export async function deletePayment(entry: Entry): Promise<() => Promise<void>> {
+  const before = bills.value.find((b) => b.id === entry.bill_id)?.next_due;
+  await api.deleteEntry(entry.id);
+  removeEntry(entry.id);
+  const synced = syncBills();
+  return async () => {
+    await synced;
+    const bill = bills.value.find((b) => b.id === entry.bill_id);
+    if (bill && before && bill.next_due < before) {
+      const res = await api.payBill(bill.id, { due: bill.next_due, occurred_at: entry.occurred_at }).catch(afterConflict);
+      putBill(res.bill);
+      addEntries([res.entry], { fresh: true });
+    } else {
+      const res = await api.createEntries([recreate(entry)]);
+      addEntries(res.entries, { fresh: true });
+    }
+  };
+}
+
+/** The same entry, as new (the bill link stays with the bill). */
+export function recreate(e: Entry): NewEntry {
+  return { amount_cents: e.amount_cents, currency: e.currency, description: e.description, category_id: e.category_id, occurred_at: e.occurred_at, note: e.note, source: e.source };
 }
 
 /** "Skip this one": the due occurrence passes without an entry. */

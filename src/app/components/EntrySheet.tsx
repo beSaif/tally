@@ -1,13 +1,15 @@
 /**
  * Edit / delete an existing entry (spec §3.7). Deleting shows a 5s "Entry deleted · UNDO" toast;
- * undo re-creates the entry with the same fields.
+ * undo re-creates the entry with the same fields. Deleting a bill's latest payment makes that
+ * occurrence due again, and undo pays it again.
  */
 import { useState } from 'preact/hooks';
-import type { Entry, EntryPatch, NewEntry } from '@shared/api';
+import type { Entry, EntryPatch } from '@shared/api';
 import { isValidMinute } from '@shared/dates';
 import { parseAmount } from '@shared/money';
 import { t, type TKey } from '../i18n';
 import { api } from '../lib/api';
+import { deletePayment, recreate } from '../lib/bills';
 import { amountInputValue } from '../lib/format';
 import { addEntries, removeEntry, replaceEntry } from '../lib/ledger';
 import { showToast } from '../lib/toast';
@@ -38,20 +40,11 @@ function diff(e: Entry, d: EntryDraft): EntryPatch {
   return patch;
 }
 
-function undoDelete(e: Entry): void {
-  const again: NewEntry = {
-    amount_cents: e.amount_cents,
-    currency: e.currency,
-    description: e.description,
-    category_id: e.category_id,
-    occurred_at: e.occurred_at,
-    note: e.note,
-    source: e.source,
-  };
-  api
-    .createEntries([again])
-    .then((res) => addEntries(res.entries, { fresh: true }))
-    .catch(() => showToast({ text: t('entry.saveFailed') }));
+async function deleteEntry(e: Entry): Promise<() => Promise<void>> {
+  if (e.bill_id) return deletePayment(e);
+  await api.deleteEntry(e.id);
+  removeEntry(e.id);
+  return async () => addEntries((await api.createEntries([recreate(e)])).entries, { fresh: true });
 }
 
 export default function EntrySheet({ entry, onClose }: { entry: Entry; onClose: () => void }) {
@@ -83,10 +76,10 @@ export default function EntrySheet({ entry, onClose }: { entry: Entry; onClose: 
     setBusy(true);
     setError(null);
     try {
-      await api.deleteEntry(entry.id);
-      removeEntry(entry.id);
+      const undo = await deleteEntry(entry);
       onClose();
-      showToast({ text: t('entry.deleted'), actionLabel: t('entry.undo'), onAction: () => undoDelete(entry), duration: 5000 });
+      const onAction = () => void undo().catch(() => showToast({ text: t('entry.saveFailed') }));
+      showToast({ text: t('entry.deleted'), actionLabel: t('entry.undo'), onAction, duration: 5000 });
     } catch {
       setBusy(false);
       setError('entry.deleteFailed');

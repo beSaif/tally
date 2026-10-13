@@ -54,7 +54,7 @@ billsRoutes.post('/sync', requireUser, async (c) => {
     for (const day of days) {
       const entryId = uuid();
       ids.push(entryId);
-      writes.push(insertBillEntry(db, { entryId, userId, billId: bill.id, occurredAt: `${day}T${BILL_TIME}`, due: bill.next_due, source: 'manual', rawInput: null, now }));
+      writes.push(insertBillEntry(db, { entryId, userId, billId: bill.id, occurredAt: `${day}T${BILL_TIME}`, due: bill.next_due, paysFor: day, source: 'manual', rawInput: null, now }));
     }
     writes.push(advanceBill(db, userId, bill.id, bill.next_due, nextAfter(bill.anchor, bill.cadence, last), now));
   }
@@ -130,7 +130,7 @@ billsRoutes.post('/', requireUser, async (c) => {
       .bind(id, userId, input.amount_cents, currency, input.description, input.category_id ?? null, userId, input.cadence, input.first_due, input.first_due, input.mode, now, now),
     ...(paid
       ? [
-          insertBillEntry(db, { entryId, userId, billId: id, occurredAt: paid, due: input.first_due, source: input.source ?? 'manual', rawInput: input.raw_input ?? null, now }),
+          insertBillEntry(db, { entryId, userId, billId: id, occurredAt: paid, due: input.first_due, paysFor: input.first_due, source: input.source ?? 'manual', rawInput: input.raw_input ?? null, now }),
           advanceBill(db, userId, id, input.first_due, nextDue, now),
         ]
       : []),
@@ -217,7 +217,7 @@ billsRoutes.post('/:id/pay', requireUser, async (c) => {
   const entryId = uuid();
   const now = nowMs();
   const results = await db.batch<BillRow | EntryRow>([
-    insertBillEntry(db, { entryId, userId, billId: bill.id, occurredAt: occurred_at ?? `${due}T${BILL_TIME}`, due, source: 'manual', rawInput: null, now }),
+    insertBillEntry(db, { entryId, userId, billId: bill.id, occurredAt: occurred_at ?? `${due}T${BILL_TIME}`, due, paysFor: due, source: 'manual', rawInput: null, now }),
     advanceBill(db, userId, bill.id, due, nextAfter(bill.anchor, bill.cadence, due), now),
     db.prepare(`${BILL_SELECT} WHERE b.id = ? AND b.user_id = ?`).bind(bill.id, userId),
     db.prepare(`${ENTRY_SELECT} WHERE e.id = ? AND e.user_id = ?`).bind(entryId, userId),

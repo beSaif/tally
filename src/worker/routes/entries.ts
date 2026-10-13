@@ -10,6 +10,7 @@ import { loadCategoryRefs } from '../lib/categories';
 import { ENTRY_SELECT, type EntryRow, entryFromRow, listEntries, needsCategoryNames, OWN_CATEGORY_SQL, resolveCategoryId } from '../lib/entries';
 import { readRange } from '../lib/range';
 import { queueAlertsFor, queueBudgetAlerts } from '../lib/alerts';
+import { advanceBill, type PaymentRow, unpayTarget } from '../lib/bills';
 
 const INSERT_ENTRY = `INSERT INTO entries
   (id, user_id, amount_cents, currency, description, category_id, occurred_at, note, source, raw_input, created_at, updated_at)
@@ -101,8 +102,20 @@ entriesRoutes.patch('/:id', requireUser, async (c) => {
   return c.json({ entry: entryFromRow(row) });
 });
 
+/** Deleting a bill's latest payment makes the occurrence it paid due again. */
 entriesRoutes.delete('/:id', requireUser, async (c) => {
-  const result = await c.env.DB.prepare('DELETE FROM entries WHERE id = ? AND user_id = ?').bind(c.req.param('id'), c.var.user.id).run();
-  if (result.meta.changes === 0) throw notFound('Entry not found');
+  const userId = c.var.user.id;
+  const db = c.env.DB;
+  const id = c.req.param('id');
+  const payment = await db
+    .prepare('SELECT id, bill_id, bill_due, occurred_at, created_at FROM entries WHERE id = ? AND user_id = ? AND bill_id IS NOT NULL')
+    .bind(id, userId)
+    .first<PaymentRow>();
+  const back = payment ? await unpayTarget(db, userId, payment) : null;
+  const [result] = await db.batch([
+    db.prepare('DELETE FROM entries WHERE id = ? AND user_id = ?').bind(id, userId),
+    ...(payment && back ? [advanceBill(db, userId, payment.bill_id, back.from, back.to, nowMs())] : []),
+  ]);
+  if (result?.meta.changes === 0) throw notFound('Entry not found');
   return c.body(null, 204);
 });

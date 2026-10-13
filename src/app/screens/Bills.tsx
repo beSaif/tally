@@ -4,7 +4,7 @@
  * bill: its next dates, what it paid, and how it is logged.
  */
 import { useEffect, useState } from 'preact/hooks';
-import type { Bill, BillDetail, BillSuggestion } from '@shared/api';
+import type { Bill, BillDetail, BillSuggestion, Entry } from '@shared/api';
 import { monthlyCents, nextAfter, occurrencesBetween } from '@shared/bills';
 import { addDays, addMonths, daysBetween, isValidDay, monthRange, toLocalMinute, weekdayOf } from '@shared/dates';
 import { formatAmount } from '@shared/money';
@@ -21,6 +21,7 @@ import { cadenceName, ModeSwitch, RepeatMark } from '../components/BillBits';
 import BillSheet, { type BillSheetFor } from '../components/BillSheet';
 import CaptureSheet from '../components/CaptureSheet';
 import Composer from '../components/Composer';
+import EntrySheet from '../components/EntrySheet';
 import { IconChevronLeft, IconChevronRight } from '../components/Icons';
 import Sheet from '../components/Sheet';
 
@@ -276,8 +277,11 @@ function BillPage({ id }: { id: string }) {
   const [editing, setEditing] = useState<BillSheetFor | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [openEntry, setOpenEntry] = useState<Entry | null>(null);
   const today = todayLocal();
   const language = lang.value;
+  // Paying, or undoing a deleted payment, elsewhere moves the bill: show what the server has.
+  const nextDue = bills.value.find((b) => b.id === id)?.next_due;
 
   const fetchDetail = async () => {
     try {
@@ -288,7 +292,7 @@ function BillPage({ id }: { id: string }) {
   };
   useEffect(() => {
     void fetchDetail();
-  }, [id]);
+  }, [id, nextDue]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -374,7 +378,19 @@ function BillPage({ id }: { id: string }) {
       {entries.length > 0 ? (
         <ul class="entries">
           {entries.map((e) => (
-            <li key={e.id}>
+            <li
+              key={e.id}
+              class="row-btn"
+              role="button"
+              tabIndex={0}
+              onClick={() => setOpenEntry(e)}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  ev.preventDefault();
+                  setOpenEntry(e);
+                }
+              }}
+            >
               <span class="t">{timeOf(e.occurred_at)}</span>
               <span>
                 <span class="n">{weekdayDayMonth(dayOf(e.occurred_at), language)}</span>
@@ -431,6 +447,15 @@ function BillPage({ id }: { id: string }) {
       )}
 
       {editing ? <BillSheet target={editing} onClose={() => setEditing(null)} onSaved={() => void fetchDetail()} /> : null}
+      {openEntry ? (
+        <EntrySheet
+          entry={openEntry}
+          onClose={() => {
+            setOpenEntry(null);
+            void fetchDetail();
+          }}
+        />
+      ) : null}
     </main>
   );
 }

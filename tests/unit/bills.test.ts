@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findPatterns, firstOnOrAfter, isOccurrence, monthlyCents, nextAfter, occurrence, occurrencesBetween, patternKey, type PastEntry } from '@shared/bills';
+import { findPatterns, firstOnOrAfter, isOccurrence, monthlyCents, nextAfter, occurrence, occurrencesBetween, patternKey, previousBefore, type PastEntry } from '@shared/bills';
 
 describe('occurrences', () => {
   it('counts every occurrence from the anchor, so month ends clamp without drifting', () => {
@@ -28,6 +28,16 @@ describe('occurrences', () => {
     expect(isOccurrence('2026-01-31', 'monthly', '2025-12-31')).toBe(false);
     expect(occurrencesBetween('2026-09-14', 'monthly', '2026-09-20', '2026-12-31')).toEqual(['2026-10-14', '2026-11-14', '2026-12-14']);
     expect(occurrencesBetween('2026-10-01', 'weekly', '2026-10-01', '2027-12-31', 3)).toHaveLength(3);
+  });
+
+  it('steps back to the occurrence before a day, never past the anchor', () => {
+    expect(previousBefore('2026-01-31', 'monthly', '2026-03-31')).toBe('2026-02-28');
+    expect(previousBefore('2026-01-31', 'monthly', '2026-03-15')).toBe('2026-02-28');
+    expect(previousBefore('2026-01-31', 'monthly', '2026-02-28')).toBe('2026-01-31');
+    expect(previousBefore('2026-10-05', 'weekly', '2026-10-19')).toBe('2026-10-12');
+    expect(previousBefore('2025-03-01', 'yearly', '2027-03-01')).toBe('2026-03-01');
+    expect(previousBefore('2026-10-12', 'monthly', '2026-10-12')).toBeNull();
+    expect(previousBefore('2026-10-12', 'monthly', '2026-10-01')).toBeNull();
   });
 
   it('spreads a bill over months', () => {

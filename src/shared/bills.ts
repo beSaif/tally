@@ -39,6 +39,15 @@ export function nextAfter(anchor: string, cadence: Cadence, day: string): string
   return firstOnOrAfter(anchor, cadence, addDays(day, 1));
 }
 
+/** The last occurrence strictly before `day`, or null when `day` is on or before the anchor. */
+export function previousBefore(anchor: string, cadence: Cadence, day: string): string | null {
+  if (day <= anchor) return null;
+  const back = cadence === 'weekly' ? addDays(day, -7) : addMonths(day, -MONTH_STEP[cadence]);
+  let at = firstOnOrAfter(anchor, cadence, back);
+  for (let next = nextAfter(anchor, cadence, at); next < day; next = nextAfter(anchor, cadence, at)) at = next;
+  return at < day ? at : null;
+}
+
 export function isOccurrence(anchor: string, cadence: Cadence, day: string): boolean {
   return day >= anchor && firstOnOrAfter(anchor, cadence, day) === day;
 }

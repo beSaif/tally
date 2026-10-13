@@ -70,6 +70,37 @@ describe('bills', () => {
     expect(detail.entries.map((e) => e.id)).toEqual([paid.entry.id]);
   });
 
+  it('deleting the latest payment makes its occurrence due again; an older one leaves the bill', async () => {
+    const s = await signup();
+    const { bill } = await create(s, { first_due: '2026-11-12' });
+    const pay = (due: string) => api(`/api/bills/${bill.id}/pay`, { body: { due, occurred_at: '2026-10-13T17:56' }, cookie: s.cookie }).then((r) => json<{ bill: Bill; entry: Entry }>(r));
+    const nov = await pay('2026-11-12');
+    const dec = await pay('2026-12-12');
+    expect(dec.bill.next_due).toBe('2027-01-12');
+    const del = (id: string) => api(`/api/entries/${id}`, { method: 'DELETE', cookie: s.cookie });
+    const nextDue = async () => (await json<BillDetail>(await api(`/api/bills/${bill.id}`, { cookie: s.cookie }))).bill.next_due;
+
+    // November is not the latest payment: December stays paid, and so the bill stays put.
+    const again = await pay('2027-01-12');
+    expect((await del(nov.entry.id)).status).toBe(204);
+    expect(await nextDue()).toBe('2027-02-12');
+    expect((await del(again.entry.id)).status).toBe(204);
+    expect(await nextDue()).toBe('2027-01-12');
+    expect((await del(dec.entry.id)).status).toBe(204);
+    expect(await nextDue()).toBe('2026-12-12');
+    expect(await entriesIn(s, '2026-10-01', '2026-10-31')).toEqual([]);
+  });
+
+  it('deleting a payment logged before the paid day was kept moves the bill back one occurrence', async () => {
+    const s = await signup();
+    const { bill, entry } = await create(s, { first_due: '2026-10-12', paid_at: '2026-10-12T21:32' });
+    const { bill: moved } = await json<{ bill: Bill }>(await api(`/api/bills/${bill.id}/skip`, { body: { due: '2026-11-12' }, cookie: s.cookie }));
+    expect(moved.next_due).toBe('2026-12-12');
+    await env.DB.prepare('UPDATE entries SET bill_due = NULL WHERE id = ?').bind(entry!.id).run();
+    expect((await api(`/api/entries/${entry!.id}`, { method: 'DELETE', cookie: s.cookie })).status).toBe(204);
+    expect((await json<BillDetail>(await api(`/api/bills/${bill.id}`, { cookie: s.cookie }))).bill.next_due).toBe('2026-11-12');
+  });
+
   it('skips an occurrence without an entry', async () => {
     const s = await signup();
     const { bill } = await create(s);

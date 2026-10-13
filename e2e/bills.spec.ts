@@ -204,6 +204,19 @@ test('due today: Paid it logs the entry, moves the bill on, and can be undone', 
   await expect(page.locator('.bill-card.due')).toHaveCount(0);
 });
 
+test('Home shows the next bill only while it is close', async ({ page }) => {
+  await prepare(page, { withKey: true });
+  await signUp(page, { settings: { setup_complete: true } });
+  await newBill(page, { first_due: '2026-12-14' });
+  const synced = page.waitForResponse((r) => r.url().endsWith('/api/bills/sync') && r.ok());
+  await page.goto('/');
+  await synced;
+  await expect(page.locator('.bill-strip')).toHaveCount(0);
+  await newBill(page, { description: 'Netflix', first_due: '2026-10-31' });
+  await page.reload();
+  await expect(page.locator('.bill-strip')).toContainText('Netflix · Sat 31 Oct');
+});
+
 test('logs itself: an automatic bill that came due is in the ledger when Home opens', async ({ page }) => {
   await prepare(page, { withKey: true });
   await signUp(page, { settings: { setup_complete: true } });
@@ -240,6 +253,18 @@ test('one bill: next dates, what it paid, how it is logged; skip, pay, edit and 
   await page.getByRole('button', { name: 'Skip this one' }).click();
   await expect(page.locator('.next-dates li').first()).toHaveText(/Sat\s*14 Nov/);
   await page.getByRole('button', { name: 'Mark paid now' }).click();
+  await expect(page.locator('.next-dates li').first()).toHaveText(/Mon\s*14 Dec/);
+  await expect(page.locator('.bill-page .entries li')).toHaveCount(2);
+
+  // Paid by mistake: delete that payment and November is due again; Undo pays it again.
+  await page.locator('.bill-page .entries li').first().click();
+  const entrySheet = page.getByRole('dialog', { name: 'Edit entry' });
+  await entrySheet.getByRole('button', { name: 'Delete entry' }).click();
+  await entrySheet.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.locator('.next-dates li').first()).toHaveText(/Sat\s*14 Nov/);
+  await expect(page.locator('.bill-page .entries li')).toHaveCount(1);
+  expect((await billsOf(page))[0]?.next_due).toBe('2026-11-14');
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('.next-dates li').first()).toHaveText(/Mon\s*14 Dec/);
   await expect(page.locator('.bill-page .entries li')).toHaveCount(2);
 

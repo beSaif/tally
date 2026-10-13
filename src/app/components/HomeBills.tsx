@@ -60,12 +60,19 @@ function DueCard({ bill, today }: { bill: Bill; today: string }) {
   );
 }
 
-/** "Swisscom mobile · Wed 14 … 45.00 ›": the first bill still to come, and how many follow this month. */
+/** How far ahead Home looks for the next bill, past the end of this month. */
+const NEXT_BILL_DAYS = 7;
+
+/**
+ * "Swisscom mobile · Wed 14 … 45.00 ›": the first bill still to come, and how many follow this
+ * month. Only while it is close (this month or the next week); the calendar has the rest.
+ */
 function NextBill({ today }: { today: string }) {
   const upcoming = bills.value.filter((b) => b.next_due > today);
   const next = upcoming[0];
-  if (!next) return null;
   const monthEnd = monthRange(today).to;
+  const soon = addDays(today, NEXT_BILL_DAYS);
+  if (!next || next.next_due > (soon > monthEnd ? soon : monthEnd)) return null;
   const more = upcoming.slice(1).filter((b) => b.next_due <= monthEnd).length;
   const when = next.next_due === addDays(today, 1) ? t('bills.nextTomorrow') : nextLabel(next.next_due);
   const caption = more > 0 ? t('bills.nextMore', { count: more }) : next.mode === 'auto' ? t('bills.logsItself') : t('bills.next');
