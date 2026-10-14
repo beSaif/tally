@@ -25,7 +25,7 @@ const CTX: AskContext = {
   entries: [
     { occurred_at: '2026-10-03T09:15', amount_cents: 41230, currency: 'CHF', description: 'Migros', category: 'Groceries', note: null },
     { occurred_at: '2026-10-05T12:40', amount_cents: 2100, currency: 'CHF', description: 'Lunch', category: 'Dining', note: 'split with Anna, total 42.00' },
-    { occurred_at: '2026-10-04T08:05', amount_cents: 450, currency: 'EUR', description: 'Coffee\nto go', category: null, note: '' },
+    { occurred_at: '2026-10-04T08:05', amount_cents: 450, currency: 'EUR', home_cents: 405, description: 'Coffee\nto go', category: null, note: '' },
   ],
 };
 
@@ -39,7 +39,7 @@ const EXPECTED_INSTRUCTION = [
   '- Other 4.50 CHF',
   'Entries (date time amount category description | note):',
   '2026-10-05 12:40 · 21.00 CHF · Dining · Lunch | split with Anna, total 42.00',
-  '2026-10-04 08:05 · 4.50 EUR · Other · Coffee to go',
+  '2026-10-04 08:05 · 4.50 EUR (≈ 4.05 CHF) · Other · Coffee to go',
   '2026-10-03 09:15 · 412.30 CHF · Groceries · Migros',
 ].join('\n');
 

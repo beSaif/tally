@@ -70,6 +70,11 @@ export interface Entry {
   id: string;
   amount_cents: number;
   currency: string;
+  /**
+   * What it counts for in the person's currency (settings), converted at its day's reference rate
+   * when `currency` is another one. Null while no rate is known: totals then count amount_cents.
+   */
+  home_cents: number | null;
   description: string;
   category_id: string | null;
   category_name: string | null;

@@ -297,7 +297,7 @@ async function sendMonthly(run: Run, item: Due): Promise<void> {
  */
 async function periodStats(env: Env, userId: string, range: DayRange): Promise<PeriodStats> {
   const { results } = await env.DB.prepare(
-    `SELECT c.name AS name, SUM(e.amount_cents) AS total_cents, COUNT(*) AS count
+    `SELECT c.name AS name, SUM(COALESCE(e.home_cents, e.amount_cents)) AS total_cents, COUNT(*) AS count
        FROM entries e LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = e.user_id
       WHERE e.user_id = ? AND e.occurred_at >= ? AND e.occurred_at <= ?
       GROUP BY e.category_id
@@ -314,7 +314,7 @@ async function periodStats(env: Env, userId: string, range: DayRange): Promise<P
 }
 
 async function periodTotal(env: Env, userId: string, range: DayRange): Promise<number> {
-  const row = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?')
+  const row = await env.DB.prepare('SELECT COALESCE(SUM(COALESCE(home_cents, amount_cents)), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?')
     .bind(userId, ...occurredBounds(range))
     .first<{ total: number }>();
   return row?.total ?? 0;

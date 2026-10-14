@@ -3,7 +3,7 @@ import type { ApiErrorBody, Entry, NewEntry } from '@shared/api';
 import { csvField, csvLine, csvText, entriesCsv, plainAmount } from '../../src/worker/lib/csv';
 import { api, signup, type Session } from './helpers';
 
-const HEADER = 'date,time,amount,currency,description,category,note,source,id';
+const HEADER = 'date,time,amount,currency,description,category,note,source,id,home_amount,home_currency';
 const CRLF = '\r\n';
 
 async function createEntries(s: Session, entries: Array<Partial<NewEntry>>): Promise<Entry[]> {
@@ -61,14 +61,14 @@ describe('CSV helpers', () => {
     expect(csvText('\tx')).toBe("'\tx");
     expect(csvText('Coffee')).toBe('Coffee');
     const csv = entriesCsv([
-      { id: 'i', amount_cents: 100, currency: 'CHF', description: '=cmd', category_id: null, category_name: null, occurred_at: '2026-10-05T12:00', note: '@n', source: 'manual', bill_id: null, created_at: 0, updated_at: 0 },
-    ]);
+      { id: 'i', amount_cents: 100, currency: 'CHF', home_cents: 100, description: '=cmd', category_id: null, category_name: null, occurred_at: '2026-10-05T12:00', note: '@n', source: 'manual', bill_id: null, created_at: 0, updated_at: 0 },
+    ], 'CHF');
     expect(csv).toContain("'=cmd");
     expect(csv).toContain("'@n");
   });
 
   it('writes a BOM and the header even with no entries', () => {
-    expect(entriesCsv([])).toBe(`﻿${HEADER}${CRLF}`);
+    expect(entriesCsv([], 'CHF')).toBe(`﻿${HEADER}${CRLF}`);
   });
 });
 
@@ -92,7 +92,7 @@ describe('GET /api/export.csv', () => {
         note: 'Split with "Sam", total 84.00',
         source: 'voice',
       },
-      { occurred_at: '2026-10-03T07:00', amount_cents: 5, currency: 'EUR', description: 'Gum', note: 'line one\nline two' },
+      { occurred_at: '2026-10-03T07:00', amount_cents: 500, currency: 'EUR', description: 'Gum', note: 'line one\nline two' },
       { occurred_at: '2026-10-31T23:59', amount_cents: 0, description: 'Free sample' },
       { occurred_at: '2026-09-30T23:59', description: 'September' },
       { occurred_at: '2026-11-01T00:00', description: 'November' },
@@ -111,11 +111,11 @@ describe('GET /api/export.csv', () => {
       '﻿' +
         [
           HEADER,
-          `2026-10-01,08:05,12.50,CHF,Migros,Groceries,,text,${migros}`,
-          `2026-10-02,12:30,42.00,CHF,"Dinner, Bains des Pâquis",Dining,"Split with ""Sam"", total 84.00",voice,${dinner}`,
-          `2026-10-03,07:00,0.05,EUR,Gum,,"line one\nline two",manual,${gum}`,
-          `2026-10-04,23:59,1234567.89,CHF,Sofa,Home,"carriage\rreturn",photo,${sofa}`,
-          `2026-10-31,23:59,0.00,CHF,Free sample,,,manual,${sample}`,
+          `2026-10-01,08:05,12.50,CHF,Migros,Groceries,,text,${migros},12.50,CHF`,
+          `2026-10-02,12:30,42.00,CHF,"Dinner, Bains des Pâquis",Dining,"Split with ""Sam"", total 84.00",voice,${dinner},42.00,CHF`,
+          `2026-10-03,07:00,5.00,EUR,Gum,,"line one\nline two",manual,${gum},4.50,CHF`,
+          `2026-10-04,23:59,1234567.89,CHF,Sofa,Home,"carriage\rreturn",photo,${sofa},1234567.89,CHF`,
+          `2026-10-31,23:59,0.00,CHF,Free sample,,,manual,${sample},0.00,CHF`,
         ].join(CRLF) +
         CRLF,
     );

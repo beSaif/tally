@@ -283,6 +283,15 @@ button.link {
   color: var(--mute);
   font-weight: 400;
 }
+/* What an entry in another currency counts for in the person's own, under its amount. */
+.home-amt {
+  display: block;
+  margin-top: 2px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--mute);
+  font-weight: 400;
+}
 .more {
   display: block;
   align-self: flex-start;

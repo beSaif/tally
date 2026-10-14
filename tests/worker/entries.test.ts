@@ -22,7 +22,7 @@ beforeEach(() => {
   budgetAlerts.mockResolvedValue(undefined);
 });
 
-const ENTRY_KEYS = ['amount_cents', 'bill_id', 'category_id', 'category_name', 'created_at', 'currency', 'description', 'id', 'note', 'occurred_at', 'source', 'updated_at'];
+const ENTRY_KEYS = ['amount_cents', 'bill_id', 'category_id', 'category_name', 'created_at', 'currency', 'description', 'home_cents', 'id', 'note', 'occurred_at', 'source', 'updated_at'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const entry = (over: Partial<NewEntry> = {}): NewEntry => ({
@@ -254,7 +254,7 @@ describe('entries', () => {
     expect(res.status).toBe(200);
     const { entry: updated } = (await res.json()) as { entry: Entry };
     expect(Object.keys(updated).sort()).toEqual(ENTRY_KEYS);
-    expect(updated).toEqual({ ...e, amount_cents: 2100, updated_at: updated.updated_at });
+    expect(updated).toEqual({ ...e, amount_cents: 2100, home_cents: 2100, updated_at: updated.updated_at });
     expect(updated.updated_at).toBeGreaterThan(e.updated_at);
 
     const all = (await (
@@ -271,6 +271,7 @@ describe('entries', () => {
       id: e.id,
       amount_cents: 2100,
       currency: 'EUR',
+      home_cents: 1890, // at the test rates: 0.90 CHF per euro
       description: 'Dinner, Bains des Pâquis',
       category_id: ids.Transport,
       category_name: 'Transport',

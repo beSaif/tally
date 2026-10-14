@@ -71,3 +71,11 @@ export function percentOf(part: number, whole: number): number {
   if (whole <= 0) return 0;
   return Math.round((part / whole) * 100);
 }
+
+/**
+ * What an entry counts for in the person's currency: its amount, converted at its day's rate when
+ * it was paid in another currency (Entry.home_cents), or as it is while that rate is unknown.
+ */
+export function spentCents(e: { amount_cents: number; home_cents: number | null }): number {
+  return e.home_cents ?? e.amount_cents;
+}

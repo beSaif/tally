@@ -25,6 +25,7 @@ const entry = (id: string, occurred_at: string, amount_cents: number, created_at
   id,
   amount_cents,
   currency: 'CHF',
+  home_cents: amount_cents,
   description: id,
   category_id: null,
   category_name: null,
@@ -84,11 +85,20 @@ describe('grouping', () => {
     ]);
     expect(sumCents(groups.flatMap((g) => g.entries))).toBe(1400);
   });
+
+  it('counts an entry in another currency at what it converted to, or as it is while no rate is known', () => {
+    const eur = { ...entry('eur', '2026-10-05T12:00', 1760), currency: 'EUR', home_cents: 1584 };
+    const pending = { ...entry('usd', '2026-10-05T13:00', 1000), currency: 'USD', home_cents: null };
+    const groups = groupByDay([entry('chf', '2026-10-05T08:00', 1865), eur, pending]);
+    expect(groups.map((g) => g.totalCents)).toEqual([1865 + 1584 + 1000]);
+    expect(sumCents([eur, pending])).toBe(2584);
+    expect(totalsByCategory([eur])).toEqual([{ name: null, totalCents: 1584 }]);
+  });
 });
 
 describe('overview maths', () => {
   it('totals entries per category, largest first, keeping uncategorised apart from a category called Other', () => {
-    const e = (category_name: string | null, amount_cents: number) => ({ category_name, amount_cents });
+    const e = (category_name: string | null, amount_cents: number) => ({ category_name, amount_cents, home_cents: amount_cents });
     expect(totalsByCategory([e('Dining', 450), e(null, 1200), e('Groceries', 2340), e('Dining', 2100), e('Other', 100)])).toEqual([
       { name: 'Dining', totalCents: 2550 },
       { name: 'Groceries', totalCents: 2340 },

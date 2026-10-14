@@ -4,7 +4,7 @@
  */
 import type { Category, Entry, MonthSummary, Summary, SummaryCategory } from '@shared/api';
 import { addMonths, isValidDay, type DayRange } from '@shared/dates';
-import { formatAmount } from '@shared/money';
+import { formatAmount, spentCents } from '@shared/money';
 
 /** How many months a trend shows, the period's own month included. */
 export const TREND_MONTHS = 6;
@@ -37,7 +37,7 @@ export function busiestDay(days: ReadonlyArray<{ day: string; total_cents: numbe
 
 /** The `n` largest entries, largest first; the earlier entry wins a tie. */
 export function biggestEntries(entries: readonly Entry[], n: number): Entry[] {
-  return [...entries].sort((a, b) => b.amount_cents - a.amount_cents || (a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0)).slice(0, n);
+  return [...entries].sort((a, b) => spentCents(b) - spentCents(a) || (a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0)).slice(0, n);
 }
 
 /** The month a report shows: `?m=YYYY-MM` when valid and begun, else last month. */

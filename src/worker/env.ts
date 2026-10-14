@@ -9,6 +9,8 @@ export interface Env {
   /** Google's endpoints; only the end-to-end tests override them, to point at a stand-in. */
   GOOGLE_AUTH_URL?: string;
   GOOGLE_TOKEN_URL?: string;
+  /** The exchange-rate service (lib/fx.ts); only tests point it elsewhere. */
+  FX_URL?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;

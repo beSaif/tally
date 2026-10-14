@@ -185,7 +185,7 @@ interface Budget {
   category?: string;
 }
 
-const CATEGORY_TOTALS = `SELECT c.id, c.name, c.budget_cents, COALESCE(SUM(e.amount_cents), 0) AS total
+const CATEGORY_TOTALS = `SELECT c.id, c.name, c.budget_cents, COALESCE(SUM(COALESCE(e.home_cents, e.amount_cents)), 0) AS total
   FROM categories c LEFT JOIN entries e ON e.category_id = c.id AND e.user_id = c.user_id AND e.occurred_at >= ? AND e.occurred_at <= ?
   WHERE c.user_id = ? AND c.budget_cents > 0
   GROUP BY c.id`;
@@ -209,7 +209,7 @@ export async function runBudgetAlerts(env: Env, userId: string, occurredAt: stri
 
   const bounds = occurredBounds(monthRange(today));
   const [totalRes, categoryRes] = await env.DB.batch([
-    env.DB.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?').bind(userId, ...bounds),
+    env.DB.prepare('SELECT COALESCE(SUM(COALESCE(home_cents, amount_cents)), 0) AS total FROM entries WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?').bind(userId, ...bounds),
     env.DB.prepare(CATEGORY_TOTALS).bind(...bounds, userId),
   ]);
   const budgets: Budget[] = [];

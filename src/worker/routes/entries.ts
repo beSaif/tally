@@ -11,6 +11,7 @@ import { ENTRY_SELECT, type EntryRow, entryFromRow, listEntries, needsCategoryNa
 import { readRange } from '../lib/range';
 import { queueAlertsFor, queueBudgetAlerts } from '../lib/alerts';
 import { advanceBill, type PaymentRow, unpayTarget } from '../lib/bills';
+import { ensureRates, fillHomeCents, foreignDays, settleHomeCents } from '../lib/fx';
 
 const INSERT_ENTRY = `INSERT INTO entries
   (id, user_id, amount_cents, currency, description, category_id, occurred_at, note, source, raw_input, created_at, updated_at)
@@ -20,6 +21,7 @@ export const entriesRoutes = new Hono<AppEnv>();
 
 entriesRoutes.get('/', requireUser, async (c) => {
   const range = readRange(c);
+  await fillHomeCents(c.env, c.var.user.id, range);
   return c.json({ entries: await listEntries(c.env, c.var.user.id, range, 'newest-first') });
 });
 
@@ -32,6 +34,7 @@ entriesRoutes.post('/', requireUser, async (c) => {
     db.prepare('SELECT currency FROM settings WHERE user_id = ?').bind(userId).first<{ currency: string }>(),
   ]);
   const currency = settings?.currency ?? DEFAULT_CURRENCY;
+  await ensureRates(c.env, foreignDays(currency, input.map((e) => ({ currency: e.currency ?? currency, day: e.occurred_at.slice(0, 10) }))));
   const now = nowMs();
   const ids = input.map(() => uuid());
   const inserts = input.map((e, i) =>
@@ -53,9 +56,10 @@ entriesRoutes.post('/', requireUser, async (c) => {
         now,
       ),
   );
+  const idList = ids.map(() => '?').join(', ');
   // Reading back in the same transaction returns exactly what was stored (category names included).
-  const readBack = db.prepare(`${ENTRY_SELECT} WHERE e.user_id = ? AND e.id IN (${ids.map(() => '?').join(', ')})`).bind(userId, ...ids);
-  const results = await db.batch<EntryRow>([...inserts, readBack]);
+  const readBack = db.prepare(`${ENTRY_SELECT} WHERE e.user_id = ? AND e.id IN (${idList})`).bind(userId, ...ids);
+  const results = await db.batch<EntryRow>([...inserts, settleHomeCents(db, userId, `id IN (${idList})`, ...ids), readBack]);
   const byId = new Map((results[results.length - 1]?.results ?? []).map((r) => [r.id, r]));
   const entries: Entry[] = ids.flatMap((id) => {
     const row = byId.get(id);
@@ -90,9 +94,19 @@ entriesRoutes.patch('/:id', requireUser, async (c) => {
   if (categoryId !== undefined) set(`category_id = ${OWN_CATEGORY_SQL}`, categoryId, userId);
   // Strictly increasing even within one millisecond, so clients can tell versions apart.
   set('updated_at = MAX(?, updated_at + 1)', nowMs());
+  if (patch.amount_cents !== undefined || patch.currency !== undefined || patch.occurred_at !== undefined) {
+    const before = await db
+      .prepare('SELECT e.currency, e.occurred_at, s.currency AS home FROM entries e JOIN settings s ON s.user_id = e.user_id WHERE e.id = ? AND e.user_id = ?')
+      .bind(id, userId)
+      .first<{ currency: string; occurred_at: string; home: string }>();
+    if (!before) throw notFound('Entry not found');
+    const after = { currency: patch.currency ?? before.currency, day: (patch.occurred_at ?? before.occurred_at).slice(0, 10) };
+    await ensureRates(c.env, foreignDays(before.home, [after]));
+  }
 
-  const [, readBack] = await db.batch<EntryRow>([
+  const [, , readBack] = await db.batch<EntryRow>([
     db.prepare(`UPDATE entries SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`).bind(...values, id, userId),
+    settleHomeCents(db, userId, 'id = ?', id),
     db.prepare(`${ENTRY_SELECT} WHERE e.id = ? AND e.user_id = ?`).bind(id, userId),
   ]);
   const row = readBack?.results[0];

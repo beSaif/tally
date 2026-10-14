@@ -12,8 +12,9 @@ import { billDueSchema, billPatchSchema, dismissSchema, newBillSchema, todaySche
 import type { AppEnv, Env } from '../env';
 import { queueAlertsFor } from '../lib/alerts';
 import { advanceBill, BILL_SELECT, billFromRow, insertBillEntry, loadBills, type BillRow } from '../lib/bills';
-import { nowMs, uuid } from '../lib/db';
+import { loadSettingsRow, nowMs, uuid } from '../lib/db';
 import { ENTRY_SELECT, entryFromRow, OWN_CATEGORY_SQL, type EntryRow } from '../lib/entries';
+import { ensureRates, foreignDays, settleHomeCents } from '../lib/fx';
 import { ApiError, notFound, readJson, readQuery, validation } from '../lib/http';
 import { requireUser } from '../lib/auth';
 
@@ -40,17 +41,23 @@ billsRoutes.post('/sync', requireUser, async (c) => {
   const userId = c.var.user.id;
   const db = c.env.DB;
   const { results: due } = await db
-    .prepare("SELECT id, cadence, anchor, next_due FROM bills WHERE user_id = ? AND mode = 'auto' AND next_due <= ?")
+    .prepare(
+      `SELECT b.id, b.currency, b.cadence, b.anchor, b.next_due, s.currency AS home FROM bills b JOIN settings s ON s.user_id = b.user_id
+        WHERE b.user_id = ? AND b.mode = 'auto' AND b.next_due <= ?`,
+    )
     .bind(userId, today)
-    .all<Pick<BillRow, 'id' | 'cadence' | 'anchor' | 'next_due'>>();
+    .all<Pick<BillRow, 'id' | 'currency' | 'cadence' | 'anchor' | 'next_due'> & { home: string }>();
 
   const now = nowMs();
   const ids: string[] = [];
   const writes: D1PreparedStatement[] = [];
+  /** Days of payments in another currency than the person's, which need that day's rates. */
+  const foreign: string[] = [];
   for (const bill of due) {
     const days = occurrencesBetween(bill.anchor, bill.cadence, bill.next_due, today, MAX_CATCH_UP);
     const last = days[days.length - 1];
     if (!last) continue;
+    if (bill.currency !== bill.home) foreign.push(...days);
     for (const day of days) {
       const entryId = uuid();
       ids.push(entryId);
@@ -59,11 +66,14 @@ billsRoutes.post('/sync', requireUser, async (c) => {
     writes.push(advanceBill(db, userId, bill.id, bill.next_due, nextAfter(bill.anchor, bill.cadence, last), now));
   }
   if (writes.length === 0) return c.json({ bills: await loadBills(c.env, userId), logged: [] });
+  await ensureRates(c.env, foreign);
 
+  const idList = ids.map(() => '?').join(', ');
   const results = await db.batch<BillRow | EntryRow>([
     ...writes,
+    settleHomeCents(db, userId, `id IN (${idList})`, ...ids),
     db.prepare(`${BILL_SELECT} WHERE b.user_id = ? ORDER BY b.next_due, b.description`).bind(userId),
-    db.prepare(`${ENTRY_SELECT} WHERE e.user_id = ? AND e.id IN (${ids.map(() => '?').join(', ')})`).bind(userId, ...ids),
+    db.prepare(`${ENTRY_SELECT} WHERE e.user_id = ? AND e.id IN (${idList})`).bind(userId, ...ids),
   ]);
   const bills = ((results[results.length - 2]?.results ?? []) as BillRow[]).map(billFromRow);
   const logged = ((results[results.length - 1]?.results ?? []) as EntryRow[]).map(entryFromRow);
@@ -113,12 +123,14 @@ billsRoutes.post('/', requireUser, async (c) => {
     db.prepare('SELECT COUNT(*) AS n FROM bills WHERE user_id = ?').bind(userId),
   ]);
   if (((count?.results[0] as { n: number } | undefined)?.n ?? 0) >= MAX_BILLS) throw validation(`At most ${MAX_BILLS} bills`);
-  const currency = input.currency ?? (settings?.results[0] as { currency: string } | undefined)?.currency ?? DEFAULT_CURRENCY;
+  const home = (settings?.results[0] as { currency: string } | undefined)?.currency ?? DEFAULT_CURRENCY;
+  const currency = input.currency ?? home;
 
   const id = uuid();
   const now = nowMs();
   const paid = input.paid_at ? input.paid_at : null;
   const nextDue = paid ? nextAfter(input.first_due, input.cadence, input.first_due) : input.first_due;
+  if (paid) await ensureRates(c.env, foreignDays(home, [{ currency, day: paid.slice(0, 10) }]));
   const entryId = uuid();
   const statements = [
     db
@@ -132,6 +144,7 @@ billsRoutes.post('/', requireUser, async (c) => {
       ? [
           insertBillEntry(db, { entryId, userId, billId: id, occurredAt: paid, due: input.first_due, paysFor: input.first_due, source: input.source ?? 'manual', rawInput: input.raw_input ?? null, now }),
           advanceBill(db, userId, id, input.first_due, nextDue, now),
+          settleHomeCents(db, userId, 'id = ?', entryId),
         ]
       : []),
     db.prepare(`${BILL_SELECT} WHERE b.id = ? AND b.user_id = ?`).bind(id, userId),
@@ -216,14 +229,18 @@ billsRoutes.post('/:id/pay', requireUser, async (c) => {
   const db = c.env.DB;
   const entryId = uuid();
   const now = nowMs();
+  const occurredAt = occurred_at ?? `${due}T${BILL_TIME}`;
+  const home = (await loadSettingsRow(c.env, userId))?.currency ?? DEFAULT_CURRENCY;
+  await ensureRates(c.env, foreignDays(home, [{ currency: bill.currency, day: occurredAt.slice(0, 10) }]));
   const results = await db.batch<BillRow | EntryRow>([
-    insertBillEntry(db, { entryId, userId, billId: bill.id, occurredAt: occurred_at ?? `${due}T${BILL_TIME}`, due, paysFor: due, source: 'manual', rawInput: null, now }),
+    insertBillEntry(db, { entryId, userId, billId: bill.id, occurredAt, due, paysFor: due, source: 'manual', rawInput: null, now }),
     advanceBill(db, userId, bill.id, due, nextAfter(bill.anchor, bill.cadence, due), now),
+    settleHomeCents(db, userId, 'id = ?', entryId),
     db.prepare(`${BILL_SELECT} WHERE b.id = ? AND b.user_id = ?`).bind(bill.id, userId),
     db.prepare(`${ENTRY_SELECT} WHERE e.id = ? AND e.user_id = ?`).bind(entryId, userId),
   ]);
-  const billRow = results[2]?.results[0] as BillRow | undefined;
-  const entryRow = results[3]?.results[0] as EntryRow | undefined;
+  const billRow = results[3]?.results[0] as BillRow | undefined;
+  const entryRow = results[4]?.results[0] as EntryRow | undefined;
   // Another tap or device paid it between our read and the write.
   if (!billRow || !entryRow) throw alreadyMoved();
   const entry = entryFromRow(entryRow);

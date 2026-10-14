@@ -167,7 +167,7 @@ test('sign in, log, edit, delete, overview, export, ask, notifications, log out 
   expect(download.suggestedFilename()).toBe('tally-2026-10-01_2026-10-31.csv');
   const csv = (await readFile(await download.path(), 'utf8')).replace(/^﻿/, '');
   const lines = csv.trim().split(/\r?\n/);
-  expect(lines[0]).toBe('date,time,amount,currency,description,category,note,source,id');
+  expect(lines[0]).toBe('date,time,amount,currency,description,category,note,source,id,home_amount,home_currency');
   expect(lines).toHaveLength(4);
   expect(csv).toContain('2026-10-05,20:14,25.00,CHF,Coop,Home,Weekly shop,text,');
 

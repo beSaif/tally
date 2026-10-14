@@ -5,6 +5,7 @@ import type { AppEnv } from '../env';
 import { ApiError, readJson } from '../lib/http';
 import { loadSettings, nowMs, settingsFromRow, type SettingsRow } from '../lib/db';
 import { requireUser } from '../lib/auth';
+import { rebaseHomeCents } from '../lib/fx';
 
 const NOTIFICATION_COLUMNS = {
   reminder: 'notif_reminder',
@@ -52,6 +53,7 @@ settingsRoutes.put('/', requireUser, async (c) => {
     .bind(...values, c.var.user.id)
     .first<SettingsRow>();
   if (!row) throw missingSettings();
+  if (input.currency !== undefined) await rebaseHomeCents(c.env, c.var.user.id);
   const settings: Settings = settingsFromRow(row);
   return c.json({ settings });
 });

@@ -17,6 +17,7 @@ import { analyticsUrl } from '../components/AppTopline';
 import CategoryBars from '../components/CategoryBars';
 import MonthColumns, { wholeAmount } from '../components/MonthColumns';
 import ReportSummary from '../components/ReportSummary';
+import { EntryAmount } from '../components/EntryList';
 
 const BIGGEST = 5;
 
@@ -187,7 +188,7 @@ function ReportBody({ data, month, today, title, comparedWith }: { data: ReportD
               <span class="n">{e.description}</span>
               <span class="c">{e.category_name ?? t('common.other')}</span>
             </span>
-            <span class="a">{formatAmount(e.amount_cents)}</span>
+            <EntryAmount entry={e} currency={currency.value} />
           </li>
         ))}
       </ul>

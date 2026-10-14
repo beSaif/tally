@@ -76,6 +76,7 @@ export default function ReportSummary({ title, comparedWith, summary, entries }:
             occurred_at: e.occurred_at,
             amount_cents: e.amount_cents,
             currency: e.currency,
+            home_cents: e.home_cents,
             description: e.description,
             category: e.category_name,
             note: e.note,

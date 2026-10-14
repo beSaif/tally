@@ -62,10 +62,22 @@ function EntryRow({ entry, currency, fresh, onOpen, showCategory }: { entry: Ent
           </span>
         ) : null}
       </span>
-      <span class="a">
-        {formatAmount(entry.amount_cents)}
-        {entry.currency !== currency ? <span class="cur-inline"> {entry.currency}</span> : null}
-      </span>
+      <EntryAmount entry={entry} currency={currency} />
     </li>
+  );
+}
+
+/**
+ * An entry's amount as paid, with its currency when that is not the person's own, and then what
+ * it counts for in theirs ("≈ 15.84") once the day's rate is known.
+ */
+export function EntryAmount({ entry, currency }: { entry: Entry; currency: string }) {
+  const foreign = entry.currency !== currency;
+  return (
+    <span class="a">
+      {formatAmount(entry.amount_cents)}
+      {foreign ? <span class="cur-inline"> {entry.currency}</span> : null}
+      {foreign && entry.home_cents !== null ? <span class="home-amt">≈ {formatAmount(entry.home_cents)}</span> : null}
+    </span>
   );
 }

@@ -8,6 +8,7 @@ export interface EntryRow {
   id: string;
   amount_cents: number;
   currency: string;
+  home_cents: number | null;
   description: string;
   category_id: string | null;
   category_name: string | null;
@@ -23,7 +24,7 @@ export interface EntryRow {
  * The columns of an `Entry` (raw_input stays server-side). LEFT JOIN so uncategorised entries
  * survive; the user_id condition means a category name can only ever come from the owner's list.
  */
-export const ENTRY_SELECT = `SELECT e.id, e.amount_cents, e.currency, e.description, e.category_id, c.name AS category_name,
+export const ENTRY_SELECT = `SELECT e.id, e.amount_cents, e.currency, e.home_cents, e.description, e.category_id, c.name AS category_name,
        e.occurred_at, e.note, e.source, e.bill_id, e.created_at, e.updated_at
   FROM entries e LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = e.user_id`;
 
@@ -38,6 +39,7 @@ export function entryFromRow(r: EntryRow): Entry {
     id: r.id,
     amount_cents: r.amount_cents,
     currency: r.currency,
+    home_cents: r.home_cents,
     description: r.description,
     category_id: r.category_id,
     category_name: r.category_name,

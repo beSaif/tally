@@ -47,7 +47,16 @@ export type AskContext = ParseContext & {
   to: string;
   totalCents: number;
   byCategory: Array<{ name: string; totalCents: number }>;
-  entries: Array<{ occurred_at: string; amount_cents: number; currency: string; description: string; category: string | null; note: string | null }>;
+  entries: Array<{
+    occurred_at: string;
+    amount_cents: number;
+    currency: string;
+    /** What it counts for in `currency` of the context, when paid in another one (Entry.home_cents). */
+    home_cents?: number | null;
+    description: string;
+    category: string | null;
+    note: string | null;
+  }>;
 };
 export type GeminiErrorCode = 'invalid_key' | 'model_not_found' | 'quota' | 'network' | 'bad_response' | 'unknown' | 'aborted';
 export type KeyCheck = { ok: true; model: string } | { ok: false; code: GeminiErrorCode; message: string };
@@ -426,10 +435,11 @@ export async function buildParseRequest(input: ParseInput, ctx: ParseContext): P
 
 type AskEntry = AskContext['entries'][number];
 
-function entryLine(entry: AskEntry, other: string): string {
+function entryLine(entry: AskEntry, other: string, currency: string): string {
+  const converted = entry.currency !== currency && entry.home_cents != null ? ` (≈ ${formatAmount(entry.home_cents)} ${currency})` : '';
   const fields = [
     entry.occurred_at.replace('T', ' '),
-    `${formatAmount(entry.amount_cents)} ${entry.currency}`,
+    `${formatAmount(entry.amount_cents)} ${entry.currency}${converted}`,
     oneLine(entry.category ?? '') || other,
     oneLine(entry.description),
   ];
@@ -453,7 +463,7 @@ export function buildAskSystemInstruction(ctx: AskContext): string {
     'By category:',
     ...(ctx.byCategory.length ? ctx.byCategory.map((c) => `- ${oneLine(c.name) || other} ${formatAmount(c.totalCents)} ${ctx.currency}`) : [none]),
     'Entries (date time amount category description | note):',
-    ...(shown.length ? shown.map((entry) => entryLine(entry, other)) : [none]),
+    ...(shown.length ? shown.map((entry) => entryLine(entry, other, ctx.currency)) : [none]),
   ];
   if (hidden > 0) lines.push(fr ? `…et ${hidden} de plus` : `…and ${hidden} more`);
   return lines.join('\n');

@@ -6,6 +6,7 @@ import type { AppEnv } from '../env';
 import { readQuery, validation } from '../lib/http';
 import { requireUser } from '../lib/auth';
 import { assertRange, occurredBounds } from '../lib/range';
+import { fillHomeCents } from '../lib/fx';
 
 interface CategoryTotalRow {
   category_id: string | null;
@@ -21,19 +22,19 @@ interface DayTotalRow {
 }
 
 // Ties are broken by name (uncategorised last) so the order is stable between refreshes.
-const BY_CATEGORY = `SELECT e.category_id, c.name, SUM(e.amount_cents) AS total_cents, COUNT(*) AS count
+const BY_CATEGORY = `SELECT e.category_id, c.name, SUM(COALESCE(e.home_cents, e.amount_cents)) AS total_cents, COUNT(*) AS count
   FROM entries e LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = e.user_id
   WHERE e.user_id = ? AND e.occurred_at >= ? AND e.occurred_at <= ?
   GROUP BY e.category_id
   ORDER BY total_cents DESC, c.name IS NULL, c.name`;
 
-const BY_DAY = `SELECT substr(occurred_at, 1, 10) AS day, SUM(amount_cents) AS total_cents, COUNT(*) AS count
+const BY_DAY = `SELECT substr(occurred_at, 1, 10) AS day, SUM(COALESCE(home_cents, amount_cents)) AS total_cents, COUNT(*) AS count
   FROM entries
   WHERE user_id = ? AND occurred_at >= ? AND occurred_at <= ?
   GROUP BY day
   ORDER BY day`;
 
-const BY_MONTH_CATEGORY = `SELECT substr(e.occurred_at, 1, 7) AS month, e.category_id, c.name, SUM(e.amount_cents) AS total_cents, COUNT(*) AS count
+const BY_MONTH_CATEGORY = `SELECT substr(e.occurred_at, 1, 7) AS month, e.category_id, c.name, SUM(COALESCE(e.home_cents, e.amount_cents)) AS total_cents, COUNT(*) AS count
   FROM entries e LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = e.user_id
   WHERE e.user_id = ? AND e.occurred_at >= ? AND e.occurred_at <= ?
   GROUP BY month, e.category_id
@@ -60,6 +61,8 @@ summaryRoutes.get('/', requireUser, async (c) => {
 
   const userId = c.var.user.id;
   const db = c.env.DB;
+  await fillHomeCents(c.env, userId, range);
+  if (prev) await fillHomeCents(c.env, userId, prev);
   const statements = [db.prepare(BY_CATEGORY).bind(userId, ...occurredBounds(range)), db.prepare(BY_DAY).bind(userId, ...occurredBounds(range))];
   if (prev) statements.push(db.prepare(BY_CATEGORY).bind(userId, ...occurredBounds(prev)));
   // One batch is one transaction: the totals, categories and days all describe the same snapshot.
@@ -99,6 +102,7 @@ summaryRoutes.get('/months', requireUser, async (c) => {
     keys.push(day.slice(0, 7));
   }
   const range: DayRange = { from: `${q.from}-01`, to: monthRange(`${q.to}-01`).to };
+  await fillHomeCents(c.env, c.var.user.id, range);
   const { results } = await c.env.DB.prepare(BY_MONTH_CATEGORY)
     .bind(c.var.user.id, ...occurredBounds(range))
     .all<CategoryTotalRow & { month: string }>();

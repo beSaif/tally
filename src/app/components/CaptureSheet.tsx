@@ -201,7 +201,11 @@ function Single({ state }: { state: ResultState }) {
 
 function Batch({ state }: { state: ResultState }) {
   const chosen = state.drafts.filter((d) => d.checked);
-  const total = chosen.reduce((sum, d) => sum + (parseAmount(d.amount) ?? 0), 0);
+  // Nothing is converted before saving, so each currency gets its own total, the person's first.
+  const totals = new Map<string, number>();
+  for (const d of chosen) totals.set(d.currency, (totals.get(d.currency) ?? 0) + (parseAmount(d.amount) ?? 0));
+  const shown = [...totals].sort(([x], [y]) => Number(y === currency.value) - Number(x === currency.value));
+  if (shown.length === 0) shown.push([currency.value, 0]);
   // One row opened by a tap still offers "Edit" (all rows); Cancel appears once all are open.
   const allEditing = state.editing.length === state.drafts.length;
   return (
@@ -223,7 +227,7 @@ function Batch({ state }: { state: ResultState }) {
       <div class="total-row">
         <span class="lbl">{t('capture.total')}</span>
         <span class="mono total">
-          {formatAmount(total)} {currency.value}
+          {shown.map(([cur, cents]) => `${formatAmount(cents)} ${cur}`).join(' + ')}
         </span>
       </div>
       {state.error ? (

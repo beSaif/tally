@@ -6,6 +6,7 @@ const entry = (id: string, amount_cents: number, occurred_at: string): Entry => 
   id,
   amount_cents,
   currency: 'CHF',
+  home_cents: amount_cents,
   description: id,
   category_id: null,
   category_name: null,
@@ -43,6 +44,9 @@ describe('analytics helpers', () => {
   it('biggestEntries: largest first, earlier first on a tie, at most n', () => {
     const list = [entry('a', 100, '2026-09-05T10:00'), entry('b', 900, '2026-09-02T10:00'), entry('c', 500, '2026-09-09T10:00'), entry('d', 500, '2026-09-01T10:00')];
     expect(biggestEntries(list, 3).map((e) => e.id)).toEqual(['b', 'd', 'c']);
+    // 10 000 yen count for what they converted to (6.00), not for their face value.
+    const yen = { ...entry('y', 1_000_000, '2026-09-03T10:00'), currency: 'JPY', home_cents: 600 };
+    expect(biggestEntries([...list, yen], 2).map((e) => e.id)).toEqual(['b', 'y']);
   });
 
   it('reportMonth: a valid, begun ?m=, else last month', () => {

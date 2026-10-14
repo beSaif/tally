@@ -18,6 +18,7 @@ import { showToast } from '../lib/toast';
 import { onAppVisible } from '../lib/visible';
 import { back, navigate, route, setQuery } from '../router';
 import { cadenceName, ModeSwitch, RepeatMark } from '../components/BillBits';
+import { EntryAmount } from '../components/EntryList';
 import BillSheet, { type BillSheetFor } from '../components/BillSheet';
 import CaptureSheet from '../components/CaptureSheet';
 import Composer from '../components/Composer';
@@ -395,7 +396,7 @@ function BillPage({ id }: { id: string }) {
               <span>
                 <span class="n">{weekdayDayMonth(dayOf(e.occurred_at), language)}</span>
               </span>
-              <span class="a">{formatAmount(e.amount_cents)}</span>
+              <EntryAmount entry={e} currency={currency.value} />
             </li>
           ))}
         </ul>

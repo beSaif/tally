@@ -204,7 +204,7 @@ Default categories by language: EN `Groceries, Dining, Transport, Home, Health, 
 - `.topline`: left `.wordmark` (tap → `/settings`); right: the **Ledger | Analytics** switch (a two-tab `.views` pill, mono 10.5px uppercase, the current one inked; Analytics pushes `/overview`, Ledger goes back to `/`, so the phone's back button matches, and it returns to the period Analytics was left on; each tab and the gear get a 44px-tall touch area without growing) followed by a 28px ghost calendar icon (tap → `/bills`, §3.10) and a 28px ghost gear icon (tap → `/settings`). Home and Analytics share this top line.
 - Hero (padding 22px 0 18px): `.lbl` "Spent this month" · `.big` 58px total with faint decimals + `.cur` currency · row (margin-top 14px) mono 11px mute: left `"64% OF 2 000"` (only when a budget is set; `round(total/budget*100)`; budget formatted without decimals when whole), right `"26 DAYS LEFT"` (days remaining after today) · `.track`/`.fill` width = min(100, pct)% (fill turns `--acc` at ≥100%). Without budget: only the "days left" text, no bar.
 - Bills (§3.10), between the hero and the list: a **Due** card per "ask me first" bill whose day has come (orange "● DUE TODAY" / "● DUE SINCE THU 1 OCT", name, amount, category · cadence, **Not yet** (hidden until tomorrow, remembered on the device) · **Paid it**); a `--paper` strip with the next bill still to come ("Swisscom mobile · Wed 14 Oct", "Next bill · 3 more this month", amount, › → `/bills?d=…`), shown only while it is close (due this month or within 7 days; the calendar has the rest); and the first habit that looks like a bill ("● LOOKS LIKE A BILL", "20 Jul · 20 Aug · 21 Sept, same amount · Monthly", **Not a bill** · **Make it a bill** → the bill sheet).
-- Entries, grouped by day (newest day first, newest entry first within a day): `.daygrp` label "TODAY" / "YESTERDAY" / "SUN 04" (weekday short + day) with the day total on the right; `.entries` rows: time `HH:MM`, name + category (uncategorised shows "Other"), amount. Tap a row → **Entry sheet** (§3.7). Rows added in this session get a 1.5s fading `--acc` 2px left bar.
+- Entries, grouped by day (newest day first, newest entry first within a day): `.daygrp` label "TODAY" / "YESTERDAY" / "SUN 04" (weekday short + day) with the day total on the right; `.entries` rows: time `HH:MM`, name + category (uncategorised shows "Other"), amount (an entry in another currency shows it after the amount, `17.60 EUR`, and under it, mute 11px, what it counts for in the person's currency, `≈ 16.40`; day totals and the hero add up those converted amounts, §5). Tap a row → **Entry sheet** (§3.7). Rows added in this session get a 1.5s fading `--acc` 2px left bar.
 - Only the two most recent days with entries show in full. The rest of the month sits below them, clipped to ~190px and faded out (a mask, not reachable by tap or screen reader), with a pill **Earlier this month · 1 194.00 ⌄** that opens it; entries that paid a bill carry a repeat glyph before their category.
 - Opened, the list shows the rest of the current month. At the bottom a mono 11px link "SHOW SEPTEMBER →" loads the previous month under a `.daygrp`-style month header "SEPTEMBER 2026 · 1 102.30"; repeatable. Bottom padding leaves room for the composer (≈ 120px + safe-area).
 - Empty month: mute 14.5px text "Nothing logged yet. Type a line or tap the mic." centred vertically in the list area.
@@ -226,7 +226,7 @@ Thinking: label "● GEMINI IS LISTENING…" / "● GEMINI IS READING…" (orang
 
 Result (single entry): `.quote` with the transcript (voice) or the typed text (text); photo shows the thumbnail instead · row: `.lbl` "Gemini parsed" + `.pill` with `.dot` "AI" · `.kv`: **Amount** (mono 20px/500 `21.00` + `.cur`), **What** (description), **Category**, **When** ("Today, 20:14" / "Yesterday, 12:40" / "Sat 03, 11:20"), **Note** (`--mute`, hidden when empty) · `.btns`: **Edit** (1fr) · **Save** (2fr, primary).
 
-Result (several entries, design C.2): row `.lbl` "3 entries found" + `.pill` "● Gemini" · list with `.check` toggles (all on by default; tap toggles; off = `.check` outlined and row at 45% opacity) each row `amount · description · category (· note)` in `.entries`-like grid `auto auto 1fr` · row "Total" `.lbl` + mono 16px/500 `50.20 CHF` (sum of checked) · `.btns`: **Edit** · **Log 3 entries** (count = checked). Tapping a row's text (not the check) opens it in edit mode inline.
+Result (several entries, design C.2): row `.lbl` "3 entries found" + `.pill` "● Gemini" · list with `.check` toggles (all on by default; tap toggles; off = `.check` outlined and row at 45% opacity) each row `amount · description · category (· note)` in `.entries`-like grid `auto auto 1fr` · row "Total" `.lbl` + mono 16px/500 `50.20 CHF` (sum of checked; nothing is converted before saving, so other currencies add their own sum: `32.65 CHF + 17.60 EUR`) · `.btns`: **Edit** · **Log 3 entries** (count = checked). Tapping a row's text (not the check) opens it in edit mode inline.
 
 Edit mode: the `.kv` values become inputs: Amount (`inputmode="decimal"`, accepts `12.5`, `12,5`, `12`), What (text), Category (a `.chips` row of `.pill`s, one `.on`, plus "Other"), When (`datetime-local`), Note (text). **Save** persists. In batch mode, Edit expands every entry into compact editable rows.
 
@@ -314,6 +314,17 @@ Timestamps `*_at` are **Unix milliseconds** (INTEGER). `occurred_at` is the user
 as `YYYY-MM-DDTHH:MM` (TEXT, minute precision, no offset) because expenses are grouped by the user's day.
 Amounts are **integer minor units** (`amount_cents`) with a 3-letter `currency`. IDs are `crypto.randomUUID()`.
 
+**Other currencies.** Every total (hero, day groups, Analytics, report, budgets, push) is in the person's
+currency (`settings.currency`). An entry paid in another one keeps its own amount and currency, and
+`entries.home_cents` holds what it counts for: `amount × rate(home) / rate(currency)` with the reference
+rates of the entry's day (Frankfurter `https://api.frankfurter.dev/v2/rates?date=…&base=EUR`: ECB and
+other central banks; a day still to come takes today's), rounded to the minor unit. In the person's own
+currency `home_cents = amount_cents`. Rates are fetched by the Worker when an entry or bill payment is
+written (at most 8 days per request) and kept per day in `fx_rates` for every account. When the service
+cannot be reached `home_cents` stays NULL and totals count `amount_cents` as it is until the next read of
+that period (`GET /entries`, `/summary`, `/summary/months`, `/export.csv`) fills it in. Changing
+`settings.currency` recomputes `home_cents` of every entry.
+
 ```sql
 users(id PK, google_sub UNIQUE NOT NULL (Google's stable account id), email UNIQUE NOT NULL (verified by Google, lower-cased), created_at)
 sessions(id PK = sha256(token) hex, user_id FK→users ON DELETE CASCADE, created_at, expires_at, user_agent)
@@ -324,6 +335,8 @@ categories(id PK, user_id FK CASCADE, name NOT NULL, position INT 0, created_at,
 entries(id PK, user_id FK CASCADE, amount_cents INT ≥ 0, currency, description NOT NULL, category_id FK→categories ON DELETE SET NULL,
         occurred_at TEXT, note NULL, source 'text'|'voice'|'photo'|'manual', raw_input NULL, created_at, updated_at)
   INDEX entries(user_id, occurred_at)
+entries.home_cents INT NULL (what it counts for in settings.currency; see "Other currencies" above; 0006)
+fx_rates(day 'YYYY-MM-DD', currency, per_eur REAL > 0, PRIMARY KEY(day, currency)) (units per euro on that day; EUR = 1)
 bills(id PK, user_id FK CASCADE, amount_cents INT ≥ 0, currency, description, category_id FK→categories ON DELETE SET NULL,
       cadence 'weekly'|'monthly'|'quarterly'|'yearly', anchor 'YYYY-MM-DD', next_due 'YYYY-MM-DD', mode 'auto'|'ask', created_at, updated_at)
   INDEX bills(user_id, next_due)
@@ -360,10 +373,10 @@ request origin (else 403). `requireUser` middleware puts `{ id, email }` on `c.v
 | `POST /auth/logout` | → 204, deletes the session, clears the cookie. |
 | `GET /auth/me` | → `{ user, settings, categories }` (bootstrap). 401 if no session. |
 | `DELETE /auth/account` | `{ email }` (the account's own, as confirmation; else 400) → 204, cascades everything. |
-| `GET /settings` · `PUT /settings` | `Partial<SettingsInput>` → `{ settings }`. Validates currency (3 upper letters), language, `budget_cents` (null or 0..1e9), model (1..80 chars), notification fields (`reminder_time` `HH:MM`). |
+| `GET /settings` · `PUT /settings` | `Partial<SettingsInput>` → `{ settings }`. Validates currency (3 upper letters), language, `budget_cents` (null or 0..1e9), model (1..80 chars), notification fields (`reminder_time` `HH:MM`). A `currency` in the body recomputes every entry's `home_cents` (§5). |
 | `PATCH /categories/:id` | `{ budget_cents?: number\|null (≥ 100), fixed?: boolean }` (at least one) → `{ category }`. 404 if not the user's. Names change through PUT, which keeps both fields. |
 | `GET /categories` · `PUT /categories` | PUT `{ categories: Array<{ id?: string, name: string }> }` replaces the list in order: existing ids are kept/renamed/re-positioned, missing ids are deleted (entries → `category_id = NULL`), new names are created. Names trimmed, 1..40 chars, unique case-insensitively. → `{ categories }`. |
-| `GET /entries?from=YYYY-MM-DD&to=YYYY-MM-DD` | inclusive day range, ≤ 366 days → `{ entries }` ordered by `occurred_at DESC, created_at DESC`. |
+| `GET /entries?from=YYYY-MM-DD&to=YYYY-MM-DD` | inclusive day range, ≤ 366 days → `{ entries }` ordered by `occurred_at DESC, created_at DESC`. `Entry` carries `home_cents` (§5, null while no rate is known); summaries and totals use `home_cents ?? amount_cents`. |
 | `POST /entries` | `{ entries: NewEntry[] }` (1..50) → 201 `{ entries }`. `NewEntry = { amount_cents, currency?, description, category_id?: string\|null, category?: string\|null (name; resolved case-insensitively to an id, unknown → null), occurred_at, note?, source, raw_input? }`. Triggers budget alerts (§8.4). |
 | `PATCH /entries/:id` | `Partial<NewEntry>` → `{ entry }`. 404 if not the user's. Triggers budget alerts. |
 | `DELETE /entries/:id` | → 204. When the entry is its bill's latest payment, the bill's `next_due` goes back to the occurrence it paid (`bill_due`; for older payments without one, the occurrence before `next_due`), if that is still on the bill's beat. Deleting an older payment leaves the bill as it is. |
@@ -379,7 +392,7 @@ request origin (else 403). `requireUser` middleware puts `{ id, email }` on `c.v
 | `POST /bills/suggestions/dismiss` | `{ key }` → 204 ("Not a bill"). |
 | `GET /summary/months?from=YYYY-MM&to=YYYY-MM` | → `MonthsSummary` = `{ months: [{ month, total_cents, count, by_category: [{ category_id, name, total_cents, count }] }] }`, every month of the range oldest first (empty months included), at most 24. Categories within a month sorted like `/summary`. |
 | `GET /summary?from&to&prev_from?&prev_to?` | → `Summary` = `{ from, to, total_cents, count, by_category: [{ category_id, name, total_cents, count, prev_total_cents? }], by_day: [{ day, total_cents, count }], previous?: { total_cents, count } }`. Categories sorted by `total_cents` desc; uncategorised as `{ category_id: null, name: null }`. |
-| `GET /export.csv?from&to` | `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="tally-<from>_<to>.csv"`. Header `date,time,amount,currency,description,category,note,source,id`; RFC 4180 quoting; amount as `12.50`; UTF-8 BOM. |
+| `GET /export.csv?from&to` | `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="tally-<from>_<to>.csv"`. Header `date,time,amount,currency,description,category,note,source,id,home_amount,home_currency`; RFC 4180 quoting; amounts as `12.50` (`home_amount` empty while no rate is known); UTF-8 BOM. |
 | `GET /push/vapid-public-key` | → `{ key }` (base64url of the 65-byte uncompressed P-256 public key). |
 | `GET /push/subscriptions` | → `{ subscriptions: [{ id, endpoint, user_agent, lang, tz, created_at, last_seen_at }] }`. |
 | `POST /push/subscribe` | `{ subscription: { endpoint, keys: { p256dh, auth } }, user_agent?, lang, tz }` → 200 `{ id }` (upsert on endpoint; re-subscribing updates keys/lang/tz/`last_seen_at`; an account keeps at most 10 devices, the least recently seen are dropped). |
@@ -456,7 +469,7 @@ Response schema (OpenAPI subset, `responseSchema`):
 Plain-text answer (`responseMimeType: 'text/plain'`, temperature 0.3, thinking off). System instruction:
 "You answer questions about a person's expenses. Answer in {language} in one or two short sentences with
 exact amounts in {currency} (format 1 284.60). Only use the data below. If the data cannot answer, say so.
-Period: {label} ({from}..{to}). Total: {total}. By category: {name total, …}. Entries (date time amount category description | note):" followed by up to 400 entry lines (newest first; if more, say "…and N more" in the context). Then `contents:[{role:'user', parts:[{text: question}]}]`.
+Period: {label} ({from}..{to}). Total: {total}. By category: {name total, …}. Entries (date time amount category description | note):" followed by up to 400 entry lines (newest first; an entry in another currency adds what it counts for, `4.50 EUR (≈ 4.05 CHF)`; if more, say "…and N more" in the context). Then `contents:[{role:'user', parts:[{text: question}]}]`.
 
 ### 7.6 Module interface (frozen; the frontend builds against it)
 
@@ -467,7 +480,7 @@ export type ParseContext = { now: Date; timeZone: string; currency: string; lang
 export type ParsedEntry = { amount_cents: number; currency: string; description: string; category: string | null; occurred_at: string; note: string | null; confidence: number; repeat: Cadence | null };
 export type ParseResult = { transcript: string; entries: ParsedEntry[]; reply: string | null };
 export type ParseInput = { kind: 'text'; text: string } | { kind: 'audio'; blob: Blob } | { kind: 'image'; blob: Blob };
-export type AskContext = ParseContext & { periodLabel: string; from: string; to: string; totalCents: number; byCategory: Array<{ name: string; totalCents: number }>; entries: Array<{ occurred_at: string; amount_cents: number; currency: string; description: string; category: string | null; note: string | null }> };
+export type AskContext = ParseContext & { periodLabel: string; from: string; to: string; totalCents: number; byCategory: Array<{ name: string; totalCents: number }>; entries: Array<{ occurred_at: string; amount_cents: number; currency: string; home_cents?: number | null; description: string; category: string | null; note: string | null }> };
 export type KeyCheck = { ok: true; model: string } | { ok: false; code: GeminiErrorCode; message: string };
 export type GeminiErrorCode = 'invalid_key' | 'model_not_found' | 'quota' | 'network' | 'bad_response' | 'unknown' | 'aborted';
 export class GeminiError extends Error { code: GeminiErrorCode; status?: number }

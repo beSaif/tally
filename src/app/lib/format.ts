@@ -5,6 +5,7 @@
  */
 import type { Cadence, Entry, ResolvedLanguage } from '@shared/api';
 import { addDays, daysBetween, parseDay, type DayRange, type PeriodKind, isoWeek, toLocalDay } from '@shared/dates';
+import { spentCents } from '@shared/money';
 import { localeOf, translate } from '../i18n';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -134,19 +135,21 @@ export function groupByDay(entries: readonly Entry[]): DayGroup[] {
       groups.push(g);
     }
     g.entries.push(e);
-    g.totalCents += e.amount_cents;
+    g.totalCents += spentCents(e);
   }
   return groups;
 }
 
-export function sumCents(entries: ReadonlyArray<{ amount_cents: number }>): number {
-  return entries.reduce((s, e) => s + e.amount_cents, 0);
+export function sumCents(entries: ReadonlyArray<{ amount_cents: number; home_cents: number | null }>): number {
+  return entries.reduce((s, e) => s + spentCents(e), 0);
 }
 
 /** Totals per category name, largest first, like the summary's by_category (null: uncategorised). */
-export function totalsByCategory(entries: ReadonlyArray<{ category_name: string | null; amount_cents: number }>): Array<{ name: string | null; totalCents: number }> {
+export function totalsByCategory(
+  entries: ReadonlyArray<{ category_name: string | null; amount_cents: number; home_cents: number | null }>,
+): Array<{ name: string | null; totalCents: number }> {
   const totals = new Map<string | null, number>();
-  for (const e of entries) totals.set(e.category_name, (totals.get(e.category_name) ?? 0) + e.amount_cents);
+  for (const e of entries) totals.set(e.category_name, (totals.get(e.category_name) ?? 0) + spentCents(e));
   return [...totals].map(([name, totalCents]) => ({ name, totalCents })).sort((a, b) => b.totalCents - a.totalCents);
 }
 

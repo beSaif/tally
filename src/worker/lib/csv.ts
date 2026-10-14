@@ -4,7 +4,7 @@ import type { Entry } from '@shared/api';
 const BOM = '﻿';
 const EOL = '\r\n'; // RFC 4180 record separator
 
-export const ENTRY_CSV_HEADER = ['date', 'time', 'amount', 'currency', 'description', 'category', 'note', 'source', 'id'] as const;
+export const ENTRY_CSV_HEADER = ['date', 'time', 'amount', 'currency', 'description', 'category', 'note', 'source', 'id', 'home_amount', 'home_currency'] as const;
 
 /** RFC 4180: quote only fields holding a quote, comma or line break, doubling inner quotes. */
 export function csvField(value: string): string {
@@ -32,7 +32,8 @@ export function plainAmount(cents: number): string {
   return `${cents < 0 ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
 }
 
-export function entriesCsv(entries: readonly Entry[]): string {
+/** `home` is the person's currency: home_amount is what each entry counts for in it (empty while its rate is unknown). */
+export function entriesCsv(entries: readonly Entry[], home: string): string {
   const rows = entries.map((e) =>
     csvLine([
       e.occurred_at.slice(0, 10),
@@ -44,6 +45,8 @@ export function entriesCsv(entries: readonly Entry[]): string {
       csvText(e.note ?? ''),
       e.source,
       e.id,
+      e.home_cents === null ? '' : plainAmount(e.home_cents),
+      home,
     ]),
   );
   return BOM + [csvLine(ENTRY_CSV_HEADER), ...rows].join(EOL) + EOL;
