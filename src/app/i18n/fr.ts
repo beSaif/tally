@@ -98,7 +98,7 @@ export const fr: Dict = {
   // ---- composer ----
   'composer.label': 'Décrivez une dépense',
   'composer.placeholder': 'Café 4.50 — ou dites-le',
-  'composer.camera': 'Photographier un ticket',
+  'composer.camera': 'Photographier ou choisir un ticket',
   'composer.mic': 'Enregistrer un message vocal',
   'composer.send': 'Envoyer',
 

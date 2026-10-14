@@ -212,7 +212,7 @@ Default categories by language: EN `Groceries, Dining, Transport, Home, Health, 
 
 ### 3.4 Composer (bottom bar)
 
-`.composer > .cbox`: text input (placeholder "Coffee 4.50 — or just talk", Enter sends, no newline) · camera `.ibtn.ghost` (opens a hidden `<input type=file accept="image/*" capture="environment">`; a chosen file → **Capture sheet** in photo mode) · right `.ibtn.dark` is **mic** when the input is empty and **send** (arrow up) when it has text.
+`.composer > .cbox`: text input (placeholder "Coffee 4.50 — or just talk", Enter sends, no newline) · camera `.ibtn.ghost` (opens a hidden `<input type=file accept="image/*">` with no `capture`, so the system offers the camera and the photo library both; a chosen file → **Capture sheet** in photo mode) · right `.ibtn.dark` is **mic** when the input is empty and **send** (arrow up) when it has text.
 
 Mic behaviour: `pointerdown` starts recording immediately (asks for microphone permission the first time). If the pointer is released within 300ms → **tap mode**: keep recording, the sheet shows "TAP TO STOP"; tapping the sheet's stop button (or the mic again) sends. Otherwise → **hold mode**: the sheet shows "RELEASE TO SEND"; releasing sends. Max 60s (auto-send). Recording uses `lib/audio.ts` (§7.3).
 

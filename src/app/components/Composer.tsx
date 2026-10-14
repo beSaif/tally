@@ -111,8 +111,8 @@ export default function Composer({ placeholder }: { placeholder?: string } = {})
         <input
           ref={fileRef}
           type="file"
+          // No `capture`: iOS and Android then offer the camera and the photo library both.
           accept="image/*"
-          capture="environment"
           class="sr-only"
           tabIndex={-1}
           aria-hidden="true"

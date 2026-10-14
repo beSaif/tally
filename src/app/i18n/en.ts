@@ -97,7 +97,7 @@ export const en = {
   // ---- composer ----
   'composer.label': 'Describe an expense',
   'composer.placeholder': 'Coffee 4.50 — or just talk',
-  'composer.camera': 'Snap a receipt',
+  'composer.camera': 'Snap or pick a receipt',
   'composer.mic': 'Record a voice note',
   'composer.send': 'Send',
 
