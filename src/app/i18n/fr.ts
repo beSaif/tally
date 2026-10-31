@@ -178,6 +178,8 @@ export const fr: Dict = {
   'overview.stats_one': '{count} dépense · moy. {avg} / jour',
   'overview.stats_other': '{count} dépenses · moy. {avg} / jour',
   'overview.statsYear': 'Moy. {avg} / mois',
+  'overview.statsAhead_one': '{count} dépense à venir',
+  'overview.statsAhead_other': '{count} dépenses à venir',
   'overview.delta': '{delta} %',
   'overview.deltaLabel': '{delta} % par rapport à {period}',
   'overview.compared': 'Évolution par rapport à {period}',

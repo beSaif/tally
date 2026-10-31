@@ -199,6 +199,8 @@ export interface Summary {
   by_category: SummaryCategory[];
   by_day: Array<{ day: string; total_cents: number; count: number }>;
   previous?: { total_cents: number; count: number };
+  /** The day of the user's newest entry in any period ('YYYY-MM-DD'), null with none; can be after today. */
+  last_day: string | null;
 }
 
 /** One calendar month of `GET /api/summary/months`: its total and per-category totals. */

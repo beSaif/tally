@@ -40,6 +40,9 @@ const BY_MONTH_CATEGORY = `SELECT substr(e.occurred_at, 1, 7) AS month, e.catego
   GROUP BY month, e.category_id
   ORDER BY month, total_cents DESC, c.name IS NULL, c.name`;
 
+// The newest entry of any period: how far ahead Analytics may step (an entry can be dated ahead).
+const LAST_DAY = `SELECT substr(MAX(occurred_at), 1, 10) AS day FROM entries WHERE user_id = ?`;
+
 /** Longest month range `GET /summary/months` accepts: two years. */
 export const MAX_MONTHS = 24;
 
@@ -64,13 +67,15 @@ summaryRoutes.get('/', requireUser, async (c) => {
   await fillHomeCents(c.env, userId, range);
   if (prev) await fillHomeCents(c.env, userId, prev);
   const statements = [db.prepare(BY_CATEGORY).bind(userId, ...occurredBounds(range)), db.prepare(BY_DAY).bind(userId, ...occurredBounds(range))];
+  statements.push(db.prepare(LAST_DAY).bind(userId));
   if (prev) statements.push(db.prepare(BY_CATEGORY).bind(userId, ...occurredBounds(prev)));
   // One batch is one transaction: the totals, categories and days all describe the same snapshot.
   const results = await db.batch(statements);
   // A batch shares one row type; each statement's shape is fixed by its SQL above.
   const categoryRows = (results[0]?.results ?? []) as CategoryTotalRow[];
   const dayRows = (results[1]?.results ?? []) as DayTotalRow[];
-  const prevRows = prev ? ((results[2]?.results ?? []) as CategoryTotalRow[]) : null;
+  const lastDay = ((results[2]?.results ?? []) as Array<{ day: string | null }>)[0]?.day ?? null;
+  const prevRows = prev ? ((results[3]?.results ?? []) as CategoryTotalRow[]) : null;
 
   const prevByCategory = new Map(prevRows?.map((r) => [r.category_id, r.total_cents]));
   const byCategory: SummaryCategory[] = categoryRows.map((r) => ({
@@ -88,6 +93,7 @@ summaryRoutes.get('/', requireUser, async (c) => {
     by_category: byCategory,
     by_day: dayRows.map((r) => ({ day: r.day, total_cents: r.total_cents, count: r.count })),
     ...(prevRows ? { previous: sum(prevRows) } : {}),
+    last_day: lastDay,
   };
   return c.json(summary);
 });

@@ -177,6 +177,8 @@ export const en = {
   'overview.stats_one': '{count} entry · avg {avg} / day',
   'overview.stats_other': '{count} entries · avg {avg} / day',
   'overview.statsYear': 'Avg {avg} / month',
+  'overview.statsAhead_one': '{count} upcoming entry',
+  'overview.statsAhead_other': '{count} upcoming entries',
   'overview.delta': '{delta}%',
   'overview.deltaLabel': '{delta}% vs {period}',
   'overview.compared': 'Change vs {period}',
