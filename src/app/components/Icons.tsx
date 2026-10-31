@@ -95,14 +95,6 @@ export function IconPlus() {
   );
 }
 
-export function IconChevronDown() {
-  return (
-    <Line>
-      <path d="M6.5 9.5 12 15l5.5-5.5" />
-    </Line>
-  );
-}
-
 export function IconChevronRight() {
   return (
     <Line>

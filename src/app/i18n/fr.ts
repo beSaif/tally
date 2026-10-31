@@ -370,7 +370,6 @@ export const fr: Dict = {
   'bills.noneFound': 'Rien à passer en revue.',
   'bills.fromBill': 'D’une facture',
   'composer.billPlaceholder': 'Une facture le {date} — ou parlez',
-  'home.earlier': 'Plus tôt ce mois-ci',
   'nav.bills': 'Factures',
 
   // ---- toasts ----

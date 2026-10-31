@@ -369,7 +369,6 @@ export const en = {
   'bills.noneFound': 'Nothing to review.',
   'bills.fromBill': 'From a bill',
   'composer.billPlaceholder': 'A bill on {date} — or just talk',
-  'home.earlier': 'Earlier this month',
   'nav.bills': 'Bills',
 
   // ---- toasts ----

@@ -1,6 +1,6 @@
 /**
- * Home (design A.1, spec §3.3): month total, what bills need, the last two days of entries with the
- * rest of the month faded below them, composer, capture & entry sheets.
+ * Home (design A.1, spec §3.3): month total, what bills need, the month's entries by day, earlier
+ * months on request, composer, capture & entry sheets.
  */
 import { useEffect, useState } from 'preact/hooks';
 import type { BillSuggestion, Entry } from '@shared/api';
@@ -8,7 +8,7 @@ import { formatAmount } from '@shared/money';
 import { lang, t } from '../i18n';
 import { capture, composerFocusRequest } from '../lib/capture';
 import { loadSuggestions, syncBills } from '../lib/bills';
-import { dayOf, groupByDay, monthLong, monthLongYear, sumCents, todayLocal } from '../lib/format';
+import { monthLong, monthLongYear, sumCents, todayLocal } from '../lib/format';
 import { offerInstallOnce } from '../lib/install';
 import { freshIds, loadCurrentMonth, loadOlderMonth, months, nextOlderMonth, type MonthBlock } from '../lib/ledger';
 import { currency, settings } from '../lib/store';
@@ -22,15 +22,10 @@ import EntryList from '../components/EntryList';
 import EntrySheet from '../components/EntrySheet';
 import Hero from '../components/Hero';
 import HomeBills from '../components/HomeBills';
-import { IconChevronDown } from '../components/Icons';
-
-/** Days shown in full at the top; the rest of the month waits, faded, below them. */
-const RECENT_DAYS = 2;
 
 export default function Home() {
   const [open, setOpen] = useState<Entry | null>(null);
   const [keeping, setKeeping] = useState<BillSuggestion | null>(null);
-  const [earlierOpen, setEarlierOpen] = useState(false);
   const today = todayLocal();
   const language = lang.value;
   const compose = route.value.query.get('compose');
@@ -63,12 +58,6 @@ export default function Home() {
   const total = current ? sumCents(current.entries) : 0;
   const nextMonth = nextOlderMonth.value;
   const isEmpty = current?.status === 'ready' && current.entries.length === 0;
-  const recentDays = new Set(groupByDay(current?.entries ?? []).slice(0, RECENT_DAYS).map((g) => g.day));
-  const recent = (current?.entries ?? []).filter((e) => recentDays.has(dayOf(e.occurred_at)));
-  const earlier = (current?.entries ?? []).filter((e) => !recentDays.has(dayOf(e.occurred_at)));
-  const hasEarlier = earlier.length > 0;
-  // Older months live under "earlier" too: nothing below the two days shows until it is opened.
-  const showRest = earlierOpen || !hasEarlier;
 
   return (
     <main class={`screen screen--list home${capture.value.kind !== 'idle' ? ' capturing' : ''}`}>
@@ -93,31 +82,13 @@ export default function Home() {
           <p>{t('home.empty')}</p>
         </div>
       ) : null}
-      {recent.length > 0 ? <EntryList entries={recent} today={today} currency={currency.value} fresh={freshIds.value} onOpen={setOpen} /> : null}
+      {current && current.entries.length > 0 ? <EntryList entries={current.entries} today={today} currency={currency.value} fresh={freshIds.value} onOpen={setOpen} /> : null}
 
-      {hasEarlier ? (
-        <section class={`earlier${earlierOpen ? ' open' : ''}`}>
-          <div class="earlier-body" aria-hidden={!earlierOpen} {...(earlierOpen ? {} : { inert: true })}>
-            <EntryList entries={earlier} today={today} currency={currency.value} fresh={freshIds.value} onOpen={setOpen} />
-          </div>
-          {earlierOpen ? null : (
-            <button type="button" class="earlier-toggle" aria-expanded={false} onClick={() => setEarlierOpen(true)}>
-              <span>
-                {t('home.earlier')} · {formatAmount(sumCents(earlier))}
-              </span>
-              <IconChevronDown />
-            </button>
-          )}
-        </section>
-      ) : null}
+      {older.map((b) => (
+        <OlderMonth key={b.key} block={b} today={today} onOpen={setOpen} />
+      ))}
 
-      {showRest
-        ? older.map((b) => (
-            <OlderMonth key={b.key} block={b} today={today} onOpen={setOpen} />
-          ))
-        : null}
-
-      {showRest && nextMonth ? (
+      {nextMonth ? (
         <button type="button" class="more" onClick={() => void loadOlderMonth()}>
           {t('home.showMonth', { month: monthLong(nextMonth, language) })}
         </button>
