@@ -17,13 +17,10 @@ test('home (A.1): month total, budget, days left, day groups; earlier months; re
   await expect(page.locator('.daygrp').nth(1)).toHaveText(/Yesterday\s*68\.20/);
   await expect(page.locator('.entries li').first()).toHaveText(/18:05\s*TPG ticket\s*Transport\s*3\.00/);
   await expect(page.getByRole('tablist', { name: 'Views' }).getByRole('tab', { selected: true })).toHaveText('Ledger');
-  // The rest of the month waits, faded and out of reach, under the last two days.
-  await expect(page.locator('.earlier-body')).toHaveAttribute('aria-hidden', 'true');
-  await expect(page.getByRole('button', { name: /^Show / })).toHaveCount(0);
-  await shot(page, 'screen-home');
-  await page.getByRole('button', { name: /^Earlier this month · 1\s194\.00$/ }).click();
+  // The whole month shows as one plain list, older days included.
   await expect(page.locator('.daygrp').nth(2)).toHaveText(/Sat 03\s*349\.40/);
-  await expect(page.locator('.earlier-body')).toHaveAttribute('aria-hidden', 'false');
+  await expect(page.getByRole('button', { name: /^Earlier this month/ })).toHaveCount(0);
+  await shot(page, 'screen-home');
   await shot(page, 'screen-home-full', { fullPage: true });
 
   // Earlier months load under a month header, one at a time.
