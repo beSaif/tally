@@ -8,7 +8,7 @@ import type { Entry, Summary, SummaryCategory } from '@shared/api';
 import { comparableRange, periodRange, previousRange, shiftAnchor, type PeriodKind } from '@shared/dates';
 import { formatAmount } from '@shared/money';
 import { lang, t } from '../i18n';
-import { anchorDay, splitFixed } from '../lib/analytics';
+import { anchorDay, horizonDay, splitFixed } from '../lib/analytics';
 import { api, isAbortError } from '../lib/api';
 import { comparedLabel, elapsedDays, elapsedMonths, monthLong, periodLabel, todayLocal } from '../lib/format';
 import { categories, currency } from '../lib/store';
@@ -35,13 +35,20 @@ export default function Overview() {
   const kind = kindOf(query.get('p'));
   const today = todayLocal();
   const anchor = anchorDay(query.get('d'), today);
-  const setAnchor = (day: string) => setQuery({ d: day >= today ? null : day });
+  // The period holding today needs no ?d=; one before or after it keeps its day in the URL.
+  const setAnchor = (day: string) => {
+    const r = periodRange(kind, day);
+    setQuery({ d: r.from <= today && today <= r.to ? null : day });
+  };
   const range = periodRange(kind, anchor);
   const prev = previousRange(kind, range);
   const compared = comparableRange(range, prev, today);
   const nextRange = periodRange(kind, shiftAnchor(kind, anchor, 1));
-  const canGoNext = nextRange.from <= today;
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  // The newest entry's day, from the last summary: next goes as far as entries dated ahead.
+  const [lastDay, setLastDay] = useState<string | null>(null);
+  const canGoNext = nextRange.from <= horizonDay(today, lastDay);
+  const ahead = range.from > today;
   const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState<Open | null>(null);
   const [editing, setEditing] = useState<{ entry: Entry; from: Open } | null>(null);
@@ -55,7 +62,10 @@ export default function Overview() {
     setLoad((l) => (l.status === 'ready' ? l : { status: 'loading' }));
     api
       .summary({ from: range.from, to: range.to, prev_from: compared.from, prev_to: compared.to }, { signal: ctrl.signal })
-      .then((summary) => setLoad({ status: 'ready', summary }))
+      .then((summary) => {
+        setLoad({ status: 'ready', summary });
+        setLastDay(summary.last_day);
+      })
       .catch((err: unknown) => {
         if (!isAbortError(err)) setLoad({ status: 'error' });
       });
@@ -68,7 +78,10 @@ export default function Overview() {
   const label = periodLabel(kind, range, language);
   const comparedWith = comparedLabel(kind, prev, compared, language);
   let stats: string;
-  if (kind === 'year') {
+  if (ahead) {
+    // A period still to come has no days behind it to average over.
+    stats = t('overview.statsAhead', { count });
+  } else if (kind === 'year') {
     const m = elapsedMonths(range, today);
     stats = t('overview.statsYear', { avg: formatAmount(m > 0 ? Math.round(total / m) : 0) });
   } else {
@@ -160,7 +173,7 @@ export default function Overview() {
       {summary && summary.by_category.length === 0 ? <p class="ov-note">{t('overview.empty')}</p> : null}
 
       <div class="ov-links">
-        {kind === 'month' ? (
+        {kind === 'month' && !ahead ? (
           <a href={reportUrl} onClick={linkTo(reportUrl)}>
             {t('overview.report', { month: monthLong(range.from, language) })}
           </a>

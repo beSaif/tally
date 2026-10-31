@@ -68,6 +68,7 @@ describe('summary', () => {
         { day: '2026-10-05', total_cents: 450, count: 1 },
         { day: '2026-10-31', total_cents: 2280, count: 1 },
       ],
+      last_day: '2026-11-01',
     });
   });
 
@@ -98,9 +99,22 @@ describe('summary', () => {
       count: 0,
       by_category: [],
       by_day: [],
+      last_day: '2026-11-01',
     });
     const withPrev = await summary(s, 'from=2027-01-01&to=2027-01-31&prev_from=2026-12-01&prev_to=2026-12-31');
     expect(withPrev.previous).toEqual({ total_cents: 0, count: 0 });
+  });
+
+  it('gives the newest entry day of any period, ahead of the range or not, and null with none', async () => {
+    const s = await signup();
+    expect((await summary(s, 'from=2026-10-01&to=2026-10-31')).last_day).toBeNull();
+    await seed(s);
+    await createEntries(s, [{ occurred_at: '2027-02-14T09:30', amount_cents: 1200 }]);
+    expect((await summary(s, 'from=2026-09-01&to=2026-09-30')).last_day).toBe('2027-02-14');
+    // Someone else's entries do not move it.
+    const other = await signup();
+    await createEntries(other, [{ occurred_at: '2028-01-01T10:00' }]);
+    expect((await summary(s, 'from=2026-09-01&to=2026-09-30&prev_from=2026-08-01&prev_to=2026-08-31')).last_day).toBe('2027-02-14');
   });
 
   it('breaks ties by name and lists uncategorised last', async () => {

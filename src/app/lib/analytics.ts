@@ -14,9 +14,12 @@ export interface MonthPoint {
   cents: number;
 }
 
-/** The trend's months, oldest first: TREND_MONTHS ending at the period's last month that has begun. */
+/**
+ * The trend's months, oldest first: TREND_MONTHS ending at the period's last month that has begun,
+ * or at its first month for a period still ahead (entries can be dated in the future).
+ */
 export function trendWindow(range: DayRange, today: string): { from: string; to: string } {
-  const end = range.to > today ? today : range.to;
+  const end = range.from > today ? range.from : range.to > today ? today : range.to;
   return { from: addMonths(end, -(TREND_MONTHS - 1)).slice(0, 7), to: end.slice(0, 7) };
 }
 
@@ -71,9 +74,14 @@ export function splitFixed(rows: readonly SummaryCategory[], categories: readonl
   return { fixed, daily };
 }
 
-/** The anchor day Analytics shows: `?d=` when it is a valid day not after today, else today. */
+/** The anchor day Analytics shows: `?d=` when it is a valid day, else today. It can be ahead of today. */
 export function anchorDay(param: string | null, today: string): string {
-  return param && isValidDay(param) && param <= today ? param : today;
+  return param && isValidDay(param) ? param : today;
+}
+
+/** The last day Analytics can step to: today, or the newest entry's day when that is later. */
+export function horizonDay(today: string, lastDay: string | null): string {
+  return lastDay !== null && lastDay > today ? lastDay : today;
 }
 
 /** The report summary's request to Gemini: what to write, with the comparison totals that the period's context lacks. */

@@ -164,6 +164,30 @@ test('a month with nothing logged says so', async ({ page }) => {
   await expect(page.locator('.ov-note')).toHaveText('Nothing logged in August.');
 });
 
+test('an entry dated ahead: next steps on to its month, and no further', async ({ page }) => {
+  await prepare(page, { withKey: true });
+  await designAccount(page);
+  await seedEntries(page, [{ amount_cents: 150_000, description: 'Rent', category: 'Bills', occurred_at: '2026-11-01T09:00', source: 'text' }]);
+  await page.goto('/overview');
+  await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible();
+  await page.getByRole('button', { name: 'Next period' }).click();
+  await expect(page).toHaveURL(/d=2026-11-05/);
+  await expect(page.getByRole('heading', { name: 'November 2026' })).toBeVisible();
+  await expect(page.locator('.ov-num')).toHaveText('1 500.00');
+  await expect(page.locator('.stats')).toHaveText('1 upcoming entry');
+  await expect(page.locator('.bars li').first()).toHaveText(/^Bills/);
+  // No report for a month that has not begun.
+  await expect(page.getByRole('link', { name: /^Report/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Next period' })).toBeDisabled();
+  // Back to the month holding today drops ?d=.
+  await page.getByRole('button', { name: 'Previous period' }).click();
+  await expect(page).toHaveURL(/\/overview\?p=month$|\/overview$/);
+  await expect(page.getByRole('heading', { name: 'October 2026' })).toBeVisible();
+  // The year holds November already: no year after it.
+  await page.getByRole('tab', { name: 'Year' }).click();
+  await expect(page.getByRole('button', { name: 'Next period' })).toBeDisabled();
+});
+
 test('category budget and fixed cost, set from the drill-down', async ({ page }) => {
   await sixMonthAccount(page);
   await page.goto('/overview');

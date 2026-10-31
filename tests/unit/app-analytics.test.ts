@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Category, Entry, MonthSummary } from '@shared/api';
-import { anchorDay, averageCents, biggestEntries, busiestDay, monthPoints, reportMonth, splitFixed, summaryQuestion, trendWindow } from '@app/lib/analytics';
+import { anchorDay, averageCents, biggestEntries, busiestDay, horizonDay, monthPoints, reportMonth, splitFixed, summaryQuestion, trendWindow } from '@app/lib/analytics';
 
 const entry = (id: string, amount_cents: number, occurred_at: string): Entry => ({
   id,
@@ -24,6 +24,9 @@ describe('analytics helpers', () => {
     expect(trendWindow({ from: '2026-09-01', to: '2026-09-30' }, '2026-10-05')).toEqual({ from: '2026-04', to: '2026-09' });
     expect(trendWindow({ from: '2026-01-01', to: '2026-12-31' }, '2026-10-05')).toEqual({ from: '2026-05', to: '2026-10' });
     expect(trendWindow({ from: '2026-02-23', to: '2026-03-01' }, '2026-10-05')).toEqual({ from: '2025-10', to: '2026-03' });
+    // A period still ahead ends the trend at its own (first) month.
+    expect(trendWindow({ from: '2026-11-01', to: '2026-11-30' }, '2026-10-05')).toEqual({ from: '2026-06', to: '2026-11' });
+    expect(trendWindow({ from: '2027-01-01', to: '2027-12-31' }, '2026-10-05')).toEqual({ from: '2026-08', to: '2027-01' });
   });
 
   it('monthPoints: one category per month (0 when absent), or the totals', () => {
@@ -83,11 +86,17 @@ describe('analytics helpers', () => {
     expect(splitFixed(rows, cats)).toEqual({ fixed: 500, daily: 500 });
   });
 
-  it('anchorDay: a valid ?d= not after today', () => {
+  it('anchorDay: a valid ?d=, before or after today', () => {
     expect(anchorDay('2026-09-14', '2026-10-05')).toBe('2026-09-14');
-    expect(anchorDay('2026-10-28', '2026-10-05')).toBe('2026-10-05');
+    expect(anchorDay('2026-11-28', '2026-10-05')).toBe('2026-11-28');
     expect(anchorDay('2026-02-30', '2026-10-05')).toBe('2026-10-05');
     expect(anchorDay(null, '2026-10-05')).toBe('2026-10-05');
+  });
+
+  it('horizonDay: today, or the newest entry when it is dated later', () => {
+    expect(horizonDay('2026-10-05', null)).toBe('2026-10-05');
+    expect(horizonDay('2026-10-05', '2026-09-30')).toBe('2026-10-05');
+    expect(horizonDay('2026-10-05', '2026-11-01')).toBe('2026-11-01');
   });
 
   it('summaryQuestion: carries the totals it is compared with', () => {
@@ -101,6 +110,7 @@ describe('analytics helpers', () => {
         { category_id: 'f', name: 'Fun', total_cents: 6180, count: 1, prev_total_cents: 0 },
       ],
       by_day: [],
+      last_day: null,
       previous: { total_cents: 115000, count: 5 },
     }, 'Other');
     expect(q).toContain('Sum up September 2026 in two short sentences');
