@@ -1,10 +1,10 @@
 /**
  * The capture sheet (spec §3.4–3.5, design A.2 + C.2) in every state, against the real API:
- * voice (hold, tap), text, batch, photo, edit mode, nothing parsed, errors, and the
+ * voice (tap, Stop & send), text, batch, photo, edit mode, nothing parsed, errors, and the
  * entry sheet (§3.7). Screenshots of each state go to e2e/__screenshots__/capture-*.png.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { designAccount, listEntries, prepare, pressMic, receiptPicture, shot } from './support/fixtures';
+import { designAccount, listEntries, prepare, receiptPicture, shot, tapMic } from './support/fixtures';
 import { BATCH_TEXT, VOICE_TRANSCRIPT, type MockGemini } from './support/mock-gemini';
 
 const composer = (page: Page) => page.getByLabel('Describe an expense');
@@ -23,17 +23,18 @@ async function home(page: Page): Promise<{ gemini: MockGemini }> {
   return { gemini };
 }
 
-test('voice: hold to talk, release to send, then confirm (A.2)', async ({ page }) => {
+test('voice: tap the mic, Stop & send, then confirm (A.2)', async ({ page }) => {
   const { gemini } = await home(page);
   const sheet = sheetOf(page);
-  await pressMic(page, { holdMs: 1300, release: false });
-  await expect(sheet.getByText('Release to send')).toBeVisible();
+  await tapMic(page);
+  await expect(sheet.getByText('Tap to stop')).toBeVisible();
   await expect(sheet.getByText(/Listening · 0:0[1-9]/)).toBeVisible();
   await expect(sheet.locator('.wave b')).toHaveCount(46);
-  await shot(page, 'capture-01-recording-hold');
+  await expect(sheet.getByText('Release to send')).toHaveCount(0);
+  await shot(page, 'capture-01-recording');
 
   gemini.hold();
-  await page.mouse.up();
+  await sheet.getByRole('button', { name: 'Stop & send' }).click();
   await expect(sheet.getByText('Gemini is listening…')).toBeVisible();
   await expect(sheet.locator('.skeleton')).toBeVisible();
   await shot(page, 'capture-04-thinking-voice');
@@ -61,58 +62,30 @@ test('voice: hold to talk, release to send, then confirm (A.2)', async ({ page }
   await expect(page.locator('.entries li.fresh')).toContainText('21.50');
 });
 
-test('voice: a quick tap keeps listening until Stop & send', async ({ page }) => {
-  await home(page);
+test('voice: Cancel drops the note, and a press held down still waits for Stop & send', async ({ page }) => {
+  const { gemini } = await home(page);
   const sheet = sheetOf(page);
-  await pressMic(page, { holdMs: 80 });
+  await tapMic(page);
+  await expect(sheet.getByRole('button', { name: 'Stop & send' })).toBeVisible();
+  await sheet.getByRole('button', { name: 'Cancel' }).click();
+  await expect(sheet).toBeHidden();
+  expect(gemini.generateBodies).toHaveLength(0);
+
+  // Holding the mic and letting go does not send: only Stop & send does.
+  const mic = page.getByRole('button', { name: 'Record a voice note' });
+  const box = await mic.boundingBox();
+  if (!box) throw new Error('mic not visible');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(1200);
+  await page.mouse.up();
   await expect(sheet.getByText('Tap to stop')).toBeVisible();
-  await page.waitForTimeout(900);
-  await shot(page, 'capture-03-recording-tap');
+  await page.waitForTimeout(600);
+  await expect(sheet.getByText(/Listening/)).toBeVisible();
   await sheet.getByRole('button', { name: 'Stop & send' }).click();
   await expect(sheet.getByText('Gemini parsed')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
-});
-
-test.describe('a press the microphone permission prompt takes away (iPhone)', () => {
-  test('goes to tap mode at once; a late release changes nothing; Stop & send ends it', async ({ page }) => {
-    await page.addInitScript(() => {
-      // The Permissions API says the microphone will prompt, and "Allow" takes a second to arrive.
-      navigator.permissions.query = async () => ({ state: 'prompt' }) as PermissionStatus;
-      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-      navigator.mediaDevices.getUserMedia = (c) => new Promise((resolve, reject) => setTimeout(() => real(c).then(resolve, reject), 1200));
-    });
-    await home(page);
-    const sheet = sheetOf(page);
-    await pressMic(page, { holdMs: 100, release: false });
-    await expect(sheet.getByText('Tap to stop')).toBeVisible();
-    await expect(sheet.getByRole('button', { name: 'Stop & send' })).toBeVisible();
-    // The finger lifting to tap "Allow" (when it reaches the page at all) must not send or cancel.
-    await page.mouse.up();
-    await expect(sheet.getByText('Tap to stop')).toBeVisible();
-    await expect(sheet.getByText(/Listening · 0:0[1-9]/)).toBeVisible();
-    await sheet.getByRole('button', { name: 'Stop & send' }).click();
-    await expect(sheet.getByText('Gemini parsed')).toBeVisible();
-    await expect(sheet.locator('.quote')).toHaveText(`“${VOICE_TRANSCRIPT}”`);
-  });
-
-  test('a pointercancel (the system took the touch) keeps listening in tap mode', async ({ page }) => {
-    await home(page);
-    const sheet = sheetOf(page);
-    await page.evaluate(() => {
-      document.addEventListener('pointerdown', (e) => ((window as unknown as { __pid: number }).__pid = e.pointerId), true);
-    });
-    await pressMic(page, { holdMs: 600, release: false });
-    await expect(sheet.getByText('Release to send')).toBeVisible();
-    await page.getByRole('button', { name: 'Record a voice note' }).evaluate((el) => {
-      el.dispatchEvent(new PointerEvent('pointercancel', { pointerId: (window as unknown as { __pid: number }).__pid, bubbles: true }));
-    });
-    await expect(sheet.getByText('Tap to stop')).toBeVisible();
-    await page.mouse.up();
-    await expect(sheet.getByText('Tap to stop')).toBeVisible();
-    await sheet.getByRole('button', { name: 'Stop & send' }).click();
-    await expect(sheet.getByText('Gemini parsed')).toBeVisible();
-  });
 });
 
 test('text: thinking, one entry, edit and cancel, save; Escape and the focus trap', async ({ page }) => {
@@ -190,6 +163,47 @@ test('batch: three entries, untick one, edit all, log two (C.2)', async ({ page 
   expect(today.find((e) => e.description === 'Coop Plainpalais')).toMatchObject({ amount_cents: 2390, category_name: 'Groceries' });
   expect(today.find((e) => e.description === 'Train → Lausanne')).toMatchObject({ amount_cents: 2280, note: '½ fare' });
   expect(today.some((e) => e.description === 'Coffee' && e.occurred_at === '2026-10-05T20:14')).toBe(false);
+});
+
+test('editing with the keyboard up: the sheet fits above it, scrolls, and the page stays put', async ({ page }) => {
+  await home(page);
+  const sheet = sheetOf(page);
+  await page.evaluate(() => window.scrollTo(0, 200));
+  await logText(page, BATCH_TEXT);
+  await sheet.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(sheet.getByLabel('Amount').first()).toBeVisible();
+
+  // What iOS reports with the keyboard open: only 360px of the screen are left above it.
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--vvh', '360px');
+    document.documentElement.style.setProperty('--kb', '484px');
+  });
+  const box = await sheet.boundingBox();
+  expect(box?.y).toBeGreaterThanOrEqual(0);
+  expect(box?.height).toBeLessThanOrEqual(360);
+  // Taller than that, so it scrolls itself: the last field and the buttons can be reached.
+  expect(await sheet.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  await sheet.getByRole('button', { name: /Log \d entries/ }).scrollIntoViewIfNeeded();
+  await expect(sheet.getByRole('button', { name: /Log \d entries/ })).toBeInViewport();
+
+  // A vertical swipe on the dim, or past the end of the sheet, is not handed to the page.
+  const swipe = (selector: string, from: number, to: number) =>
+    page.evaluate(
+      ([selector, from, to]) => {
+        const el = document.querySelector(selector as string) as HTMLElement;
+        const touch = (y: number) => new Touch({ identifier: 1, target: el, clientX: 100, clientY: y });
+        el.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(from as number)], bubbles: true, cancelable: true }));
+        const move = new TouchEvent('touchmove', { touches: [touch(to as number)], bubbles: true, cancelable: true });
+        el.dispatchEvent(move);
+        return move.defaultPrevented;
+      },
+      [selector, from, to],
+    );
+  expect(await swipe('.dim', 300, 400)).toBe(true);
+  await sheet.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  expect(await swipe('.sheet .total-row', 500, 400)).toBe(true); // at the bottom already
+  expect(await swipe('.sheet .total-row', 400, 500)).toBe(false); // back up: the sheet scrolls
+  expect(await page.evaluate(() => window.scrollY)).toBe(200);
 });
 
 test('photo: a receipt picture, thumbnail while reading, then save', async ({ page }) => {
@@ -273,7 +287,7 @@ test.describe('without microphone permission', () => {
       navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
     });
     await home(page);
-    await pressMic(page, { holdMs: 100 });
+    await tapMic(page);
     await expect(sheetOf(page).getByRole('alert')).toHaveText('Tally needs the microphone. Allow it in your browser settings.');
     await shot(page, 'capture-20-error-mic');
   });
@@ -287,12 +301,12 @@ test.describe('a microphone that cannot start', () => {
     });
     await home(page);
     const sheet = sheetOf(page);
-    await pressMic(page, { holdMs: 100 });
+    await tapMic(page);
     await expect(sheet.getByRole('alert')).toHaveText('The microphone could not start.');
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
 
-    await pressMic(page, { holdMs: 100 });
+    await tapMic(page);
     await sheet.getByRole('button', { name: 'Try again' }).click();
     await expect(sheet.getByRole('alert')).toHaveText('The microphone could not start.');
     await sheet.getByRole('button', { name: 'Close' }).click();

@@ -47,9 +47,14 @@ export function installNativeFeel(): void {
   // Keyboard: expose its height so fixed chrome (composer, sheets) can sit above it on iOS, where the
   // layout viewport does not shrink. Chrome Android resizes the layout viewport instead
   // (interactive-widget=resizes-content), which makes the inset 0 there.
+  // --vvh is the height actually visible above it, so a sheet never grows past the top of the screen
+  // while the keyboard is up (its fields would be out of reach, with nothing to scroll).
   const vv = window.visualViewport;
   if (vv) {
-    const update = () => root.style.setProperty('--kb', `${keyboardInset(window.innerHeight, vv.height, vv.offsetTop)}px`);
+    const update = () => {
+      root.style.setProperty('--kb', `${keyboardInset(window.innerHeight, vv.height, vv.offsetTop)}px`);
+      root.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+    };
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     update();

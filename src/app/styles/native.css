@@ -29,11 +29,6 @@ a,
 .tabs button {
   touch-action: manipulation; /* kills the double-tap delay and zoom on controls */
 }
-/* The mic is held (hold to talk): the browser must not claim that touch for a scroll, or the
-   press is cancelled mid-sentence. */
-.ibtn.mic {
-  touch-action: none;
-}
 img,
 svg {
   -webkit-user-drag: none;
@@ -43,6 +38,13 @@ svg {
 .composer,
 .sheet {
   bottom: var(--kb, 0px);
+}
+/* …and never taller than what is visible above it, so every field can be scrolled to. Its own
+   scroll stays its own: reaching the end does not hand the swipe to the page underneath. */
+.sheet {
+  max-height: min(88dvh, calc(var(--vvh, 100dvh) - var(--safe-t) - 8px));
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .toast {
   margin-bottom: var(--kb, 0px);

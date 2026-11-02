@@ -105,7 +105,6 @@ export const fr: Dict = {
   // ---- capture sheet ----
   'capture.sheet': 'Nouvelle dépense',
   'capture.listening': 'Écoute · {time}',
-  'capture.releaseToSend': 'Relâchez pour envoyer',
   'capture.tapToStop': 'Touchez pour arrêter',
   'capture.stopSend': 'Arrêter et envoyer',
   'capture.thinkingListen': 'Gemini écoute…',
