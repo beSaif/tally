@@ -37,10 +37,10 @@ import Wave from './Wave';
 export default function CaptureSheet() {
   const s = capture.value;
   if (s.kind === 'idle') return null;
-  const focusKey = s.kind === 'recording' ? `rec-${s.gesture}` : s.kind === 'result' ? `res-${s.editing.length > 0}` : s.kind;
+  const focusKey = s.kind === 'result' ? `res-${s.editing.length > 0}` : s.kind;
   return (
     <Sheet label={t('capture.sheet')} onClose={closeCapture} focusKey={focusKey} class={`capture ${s.kind}`}>
-      {s.kind === 'recording' ? <Recording state={s} /> : null}
+      {s.kind === 'recording' ? <Recording /> : null}
       {s.kind === 'thinking' ? <Thinking input={s.input} /> : null}
       {s.kind === 'result' ? <Result state={s} /> : null}
       {s.kind === 'empty' ? <Empty input={s.input} transcript={s.transcript} reply={s.reply} /> : null}
@@ -57,9 +57,7 @@ function CloseButton() {
   );
 }
 
-function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording' }> }) {
-  const tap = state.gesture === 'tap';
-  const hint = tap ? t('capture.tapToStop') : t('capture.releaseToSend');
+function Recording() {
   return (
     <>
       <div class="sheet-head">
@@ -67,24 +65,20 @@ function Recording({ state }: { state: Extract<CaptureState, { kind: 'recording'
           <span class="dot" />
           {t('capture.listening', { time: formatDuration(elapsedMs.value) })}
         </span>
-        <span class="lbl" aria-live="polite">
-          {hint}
-        </span>
+        <span class="lbl">{t('capture.tapToStop')}</span>
       </div>
       <div class="wave-wrap">
         <Wave values={levels.value} tone="live" />
       </div>
-      {tap ? (
-        <div class="btns">
-          <button type="button" class="btn" onClick={() => void finishRecording(false)}>
-            {t('common.cancel')}
-          </button>
-          <button type="button" class="btn primary with-icon" onClick={() => void finishRecording(true)}>
-            <IconStop />
-            {t('capture.stopSend')}
-          </button>
-        </div>
-      ) : null}
+      <div class="btns">
+        <button type="button" class="btn" onClick={() => void finishRecording(false)}>
+          {t('common.cancel')}
+        </button>
+        <button type="button" class="btn primary with-icon" onClick={() => void finishRecording(true)}>
+          <IconStop />
+          {t('capture.stopSend')}
+        </button>
+      </div>
     </>
   );
 }

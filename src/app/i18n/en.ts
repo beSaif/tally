@@ -104,7 +104,6 @@ export const en = {
   // ---- capture sheet ----
   'capture.sheet': 'New expense',
   'capture.listening': 'Listening · {time}',
-  'capture.releaseToSend': 'Release to send',
   'capture.tapToStop': 'Tap to stop',
   'capture.stopSend': 'Stop & send',
   'capture.thinkingListen': 'Gemini is listening…',

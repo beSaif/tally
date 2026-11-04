@@ -186,17 +186,9 @@ export async function shot(page: Page, name: string, opts: { fullPage?: boolean;
   await page.screenshot({ path: `${SCREENSHOT_DIR}/${name}.png`, fullPage: opts.fullPage ?? false, animations: opts.animations ?? 'disabled', caret: 'hide' });
 }
 
-/** Presses the mic like a finger: down, optionally drag up, then up after `holdMs` (unless `release: false`). */
-export async function pressMic(page: Page, opts: { holdMs: number; release?: boolean }): Promise<void> {
-  const mic = page.getByRole('button', { name: /Record a voice note|Enregistrer un message vocal/ });
-  const box = await mic.boundingBox();
-  if (!box) throw new Error('mic not visible');
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.waitForTimeout(opts.holdMs);
-  if (opts.release ?? true) await page.mouse.up();
+/** Taps the composer's mic (it starts listening; the sheet's Stop & send ends it). */
+export async function tapMic(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /Record a voice note|Enregistrer un message vocal/ }).click();
 }
 
 /** A receipt-like picture drawn in the page (PNG), for the camera input. */

@@ -1,7 +1,6 @@
 /**
- * The bottom input bar (spec §3.4): text (Enter sends), camera, and a mic that records on
- * pointerdown. Released within 300ms → tap mode (tap again to stop); held → release sends.
- * The hold/tap decision lives in lib/capture (releaseRecording), which also covers a press the microphone permission prompt takes away.
+ * The bottom input bar (spec §3.4): text (Enter sends), camera, and a mic. Pressing the mic starts
+ * listening; letting go does nothing: the sheet's "Stop & send" (or the mic again) ends it.
  */
 import { useEffect, useRef } from 'preact/hooks';
 import { t } from '../i18n';
@@ -10,9 +9,7 @@ import {
   composerFocusRequest,
   composerText,
   finishRecording,
-  keepListening,
   photoPickRequest,
-  releaseRecording,
   startRecording,
   submitPhoto,
   submitText,
@@ -23,7 +20,6 @@ import { IconCam, IconMic, IconSend } from './Icons';
 export default function Composer({ placeholder }: { placeholder?: string } = {}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const press = useRef<{ id: number; at: number } | null>(null);
   const text = composerText.value;
   const state = capture.value;
   const busy = state.kind !== 'idle';
@@ -44,41 +40,23 @@ export default function Composer({ placeholder }: { placeholder?: string } = {})
     if (composerText.value.trim()) submitText(composerText.value);
   };
 
+  const toggleMic = () => {
+    const s = capture.value;
+    if (s.kind === 'recording') void finishRecording(true); // "tap the mic again"
+    else if (s.kind === 'idle') void startRecording();
+  };
+
+  // Starts on the press itself (no wait for the release, which does nothing): the sheet with
+  // Cancel / Stop & send opens at once. Inside this gesture the microphone may be asked for.
   const onMicDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    const s = capture.value;
-    if (s.kind === 'recording') {
-      if (s.gesture === 'tap') void finishRecording(true); // "tap the mic again"
-      return;
-    }
-    if (s.kind !== 'idle') return;
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    press.current = { id: e.pointerId, at: performance.now() };
-    void startRecording('pending');
+    toggleMic();
   };
 
-  const onMicUp = (e: PointerEvent) => {
-    const p = press.current;
-    if (!p || p.id !== e.pointerId) return;
-    press.current = null;
-    releaseRecording(performance.now() - p.at);
-  };
-
-  // The system took the touch (a permission prompt, a call, …): nothing was said to be cancelled.
-  const onMicCancel = (e: PointerEvent) => {
-    const p = press.current;
-    if (!p || p.id !== e.pointerId) return;
-    press.current = null;
-    keepListening();
-  };
-
-  // Keyboard activation (Enter/Space) has no pointer: toggle tap-mode recording.
+  // Keyboard activation (Enter/Space) has no pointer; a pointer's own click was handled on pointerdown.
   const onMicClick = (e: MouseEvent) => {
-    if (e.detail !== 0) return;
-    const s = capture.value;
-    if (s.kind === 'recording') void finishRecording(true);
-    else if (s.kind === 'idle') void startRecording('tap');
+    if (e.detail === 0) toggleMic();
   };
 
   const hasText = text.trim().length > 0;
@@ -133,8 +111,6 @@ export default function Composer({ placeholder }: { placeholder?: string } = {})
             aria-label={t('composer.mic')}
             aria-pressed={state.kind === 'recording'}
             onPointerDown={onMicDown}
-            onPointerUp={onMicUp}
-            onPointerCancel={onMicCancel}
             onClick={onMicClick}
             onContextMenu={(e) => e.preventDefault()}
           >
